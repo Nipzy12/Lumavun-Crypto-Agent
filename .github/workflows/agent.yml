@@ -1,0 +1,30 @@
+name: LUMAVUN Crypto Agent V1
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 1,13 * * *'
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python src/main.py
+        env:
+          AIRDROP_RSS_FEEDS: ${{ vars.AIRDROP_RSS_FEEDS }}
+          PHANTOM_PUBLIC_ADDRESS: ${{ vars.PHANTOM_PUBLIC_ADDRESS }}
+          SOLANA_RPC_URL: ${{ vars.SOLANA_RPC_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: latest-report
+          path: latest_report.json
+          retention-days: 7
