@@ -1,0 +1,149 @@
+# LUMAVUN Crypto Agent V1.1 — vetted sources configuration
+#
+# This file documents the sources, keywords, and risk rules the agent uses.
+# It is a reference for operators and a fallback reference when
+# AIRDROP_RSS_FEEDS is not set. The agent still honors AIRDROP_RSS_FEEDS
+# from GitHub Variables when that variable is present.
+#
+# Do not add feeds you are not allowed to access or that violate terms.
+# This file does not grant permission to scrape any site.
+
+version: "1.1"
+
+# Default RSS/Atom feeds used only when AIRDROP_RSS_FEEDS is empty.
+# Replace or extend these with sources you trust and are allowed to access.
+default_feeds: []
+
+# Keywords used to decide whether a feed entry is worth extracting.
+# Matching is case-insensitive and only uses the feed text the provider
+# makes available. No scraping beyond the feed payload occurs.
+discovery:
+  campaign_keywords:
+    - airdrop
+    - testnet
+    - quest
+    - reward
+    - incentive
+    - faucet
+    - points
+
+  # Terms that suggest the entry describes a concrete campaign rather than
+  # pure speculation or announcement noise. Presence of these terms does not
+  # guarantee legitimacy; it only tunes extraction.
+  confirmation_signals:
+    - campaign
+    - eligible
+    - window
+    - snapshot
+    - distribution
+    - claimed
+    - claim
+
+  # Terms that suggest speculation, rumor, or unverified chatter.
+  speculation_signals:
+    - rumored
+    - rumour
+    - leak
+    - maybe
+    - potential
+    - not confirmed
+
+# Risk rules. Each rule has a label and a simple text matcher.
+# Matchers are case-insensitive substring checks against the extracted
+# title + summary text. They are intentionally simple and transparent.
+risk_rules:
+  - id: deposit_required
+    label: "Required deposit or upfront payment"
+    patterns:
+      - "deposit required"
+      - "send funds"
+      - "send usd"
+      - "send sol"
+      - "minimum deposit"
+      - "fund your wallet"
+      - "pay to claim"
+
+  - id: secret_request
+    label: "Seed phrase or private key request"
+    patterns:
+      - "seed phrase"
+      - "private key"
+      - "recover your wallet"
+      - "enter your phrase"
+      - "import wallet"
+
+  - id: guaranteed_profit
+    label: "Guaranteed profit claim"
+    patterns:
+      - "guaranteed profit"
+      - "guaranteed return"
+      - "guaranteed airdrop"
+      - "risk free profit"
+      - "guaranteed earnings"
+
+  - id: suspicious_url
+    label: "Suspicious URL or impersonation pattern"
+    patterns:
+      - "bit.ly"
+      - "tinyurl"
+      - "short.link"
+      - "discord.gg"  # context-dependent; keep as informational flag
+      - "t.me"        # context-dependent; keep as informational flag
+
+  - id: unknown_project
+    label: "Unknown or unverifiable project identity"
+    patterns: []
+    note: >
+      This rule is applied when project identity cannot be reliably extracted
+      from the feed entry. It is informational rather than a keyword match.
+
+  - id: unverifiable_reward
+    label: "Unverifiable reward promise"
+    patterns:
+      - "free money"
+      - "free tokens"
+      - "instant cash"
+      - "guaranteed tokens"
+
+  - id: impersonation
+    label: "Possible impersonation or misleading branding"
+    patterns:
+      - "officially"
+      - "verified airdrop"
+      - "only official"
+
+# Risk classification thresholds. These are simple, transparent rules.
+classification:
+  # HIGH_RISK_INDICATORS: one or more high-severity red flags present.
+  high_risk_indicator_ids:
+    - deposit_required
+    - secret_request
+    - guaranteed_profit
+    - impersonation
+
+  # REVIEW_REQUIRED: moderate or multiple informational flags present,
+  # but no high-severity red flag.
+  review_required_if_high_count: 0
+
+  # Rules that count as moderate rather than high severity.
+  moderate_indicator_ids:
+    - suspicious_url
+    - unknown_project
+    - unverifiable_reward
+
+# RPC configuration reference.
+rpc:
+  # Primary RPC endpoint used when SOLANA_RPC_URL is not set.
+  default_url: "https://api.mainnet-beta.solana.com"
+  # Recommended max response time before treating an endpoint as unhealthy.
+  health_timeout_seconds: 10
+  # Health check method used to probe endpoint availability.
+  health_method: "getHealth"
+
+# Dedup state retention.
+dedup:
+  # Maximum number of campaigns kept in persistent state between runs.
+  max_entries: 200
+  # Number of days a campaign can remain in state without a refresh before
+  # it is considered stale and allowed to reappear as new.
+  stale_days: 7

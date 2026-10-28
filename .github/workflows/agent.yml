@@ -1,30 +1,62 @@
-name: LUMAVUN Crypto Agent V1
+name: LUMAVUN Crypto Agent V1.1
 on:
   workflow_dispatch:
   schedule:
     - cron: '17 1,13 * * *'
 permissions:
   contents: read
+  actions: read
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
+    env:
+      LUMAVUN_REQUEST_TIMEOUT: '20'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
-      - run: pip install -r requirements.txt
-      - run: python src/main.py
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Download previous dedup state
+        id: dedup_in
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: dedup_state
+          path: ./
+      - name: Run agent
+        id: run
+        continue-on-error: true
+        run: python src/main.py
         env:
           AIRDROP_RSS_FEEDS: ${{ vars.AIRDROP_RSS_FEEDS }}
           PHANTOM_PUBLIC_ADDRESS: ${{ vars.PHANTOM_PUBLIC_ADDRESS }}
           SOLANA_RPC_URL: ${{ vars.SOLANA_RPC_URL }}
+          SOLANA_RPC_FALLBACK_URLS: ${{ vars.SOLANA_RPC_FALLBACK_URLS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      - uses: actions/upload-artifact@v4
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: latest-report
-          path: latest_report.json
+          name: latest_report
+          path: |
+            latest_report.json
+            latest_report.md
           retention-days: 7
+      - name: Upload dedup state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dedup_state
+          path: dedup_state.json
+          retention-days: 7
+      - name: Report failure summary
+        if: steps.run.outcome == 'failure' || steps.run.outcome == 'cancelled'
+        run: |
+          echo "## Run outcome" >> $GITHUB_STEP_SUMMARY
+          echo "Agent run outcome: ${{ steps.run.outcome }}" >> $GITHUB_STEP_SUMMARY
+          echo "Reports may still be available in the latest_report artifact." >> $GITHUB_STEP_SUMMARY

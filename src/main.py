@@ -1,71 +1,167 @@
+"""
+LUMAVUN Crypto Agent V1.1 — entrypoint.
+
+This orchestrator composes the discovery engine, risk scanner, Phantom
+wallet monitor, Telegram reporter, persistent state, and report writers.
+It is designed to degrade gracefully: if one integration such as Telegram
+fails, the agent still writes its reports and finishes.
+"""
+
+from __future__ import annotations
+
+import logging
 import os
-import json
-import re
-import requests
-import feedparser
+import sys
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Sequence
 
-TIMEOUT = 20
-FEEDS = [x.strip() for x in os.getenv('AIRDROP_RSS_FEEDS', '').split(',') if x.strip()]
-WALLET = os.getenv('PHANTOM_PUBLIC_ADDRESS', '').strip()
-RPC = os.getenv('SOLANA_RPC_URL', 'https://api.mainnet-beta.solana.com')
-BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
-CHAT_ID = os.getenv('TELEGRAM_CHAT_ID', '')
+from discovery import (
+    Campaign,
+    SourceHealth,
+    deduplicate_campaigns,
+    scan_feeds,
+)
+from config_loader import effective_feeds, load_config
+from reporter import build_report, write_json_report, write_markdown_report
+from risk import classify, summarize_classification
+from state import load_state_from_artifact, save_state_locally
+from telegram import (
+    build_report_message,
+    notify,
+    should_notify_campaign,
+)
+from wallet import read_wallet
 
-RED_FLAGS = ['deposit required', 'send funds', 'guaranteed profit', 'seed phrase', 'private key', 'connect wallet to verify']
+logging.basicConfig(
+    level=os.getenv("LUMAVUN_LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+logger = logging.getLogger("lumavun")
 
-def scan_feeds():
-    findings = []
-    for url in FEEDS[:10]:
-        if not url.startswith('https://'):
-            continue
-        try:
-            feed = feedparser.parse(requests.get(url, timeout=TIMEOUT).content)
-            for item in feed.entries[:15]:
-                title = item.get('title', 'Untitled')
-                link = item.get('link', '')
-                summary = re.sub(r'<[^>]+>', ' ', item.get('summary', ''))[:350]
-                if not any(k in (title + ' ' + summary).lower() for k in ('airdrop', 'testnet', 'quest', 'reward')):
-                    continue
-                flags = [k for k in RED_FLAGS if k in (title + ' ' + summary).lower()]
-                findings.append({'title': title[:100], 'url': link, 'source': url, 'flags': flags, 'status': 'REVIEW_REQUIRED'})
-        except Exception as exc:
-            print(f'Feed error ({url}): {type(exc).__name__}')
-    return findings[:20]
+REQUEST_TIMEOUT = int(os.getenv("LUMAVUN_REQUEST_TIMEOUT", "20"))
 
-def wallet_balance():
-    if not WALLET:
-        return None
-    try:
-        response = requests.post(RPC, json={'jsonrpc':'2.0','id':1,'method':'getBalance','params':[WALLET]}, timeout=TIMEOUT)
-        response.raise_for_status()
-        data = response.json()
-        if 'error' in data:
-            raise RuntimeError(data['error'].get('message', 'RPC error'))
-        return data['result']['value'] / 1_000_000_000
-    except Exception as exc:
-        print(f'Wallet RPC error: {type(exc).__name__}')
-        return None
 
-def notify(message):
-    if not BOT_TOKEN or not CHAT_ID:
-        print('Telegram not configured; printing report only.')
+def _env_list(name: str) -> List[str]:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def main() -> int:
+    logger.info("LUMAVUN Crypto Agent V1.1 starting")
+    scan_time = datetime.now(timezone.utc).isoformat()
+    config = load_config()
+
+    feeds = effective_feeds()
+    logger.info("Feeds to scan: %d", len(feeds))
+
+    campaigns, source_health, errors = scan_feeds(
+        feeds, config=config
+    )
+
+    # Risk classification and dedup are computed after scanning.
+    for campaign in campaigns:
+        classify(campaign, config)
+
+    state = load_state_from_artifact()
+    campaigns, state, duplicates_skipped = deduplicate_campaigns(
+        campaigns,
+        state,
+        max_entries=config.get("dedup", {}).get("max_entries", 200),
+        stale_days=config.get("dedup", {}).get("stale_days", 7),
+    )
+    save_state_locally(state)
+
+    wallet = read_wallet(
+        os.getenv("PHANTOM_PUBLIC_ADDRESS", "").strip(),
+        os.getenv("SOLANA_RPC_URL", "").strip() or (
+            config.get("rpc", {}).get("default_url", "") or ""
+        ),
+        _env_list("SOLANA_RPC_FALLBACK_URLS"),
+    )
+
+    # Only notify campaigns that are new relative to the previous run.
+    previous_seen_keys = set(state.get("seen", {}).keys())
+    notified_hashes: List[str] = []
+    campaigns_to_notify: List[Dict[str, Any]] = []
+    for campaign in campaigns:
+        payload = {
+            "title": campaign.title,
+            "url": campaign.url,
+            "source": campaign.source,
+            "risk_flags": campaign.risk_flags,
+            "classification": campaign.classification,
+            "is_confirmed": campaign.is_confirmed,
+            "is_speculation": campaign.is_speculation,
+        }
+        if should_notify_campaign(payload, notified_hashes):
+            campaigns_to_notify.append(payload)
+            notified_hashes.append(
+                hashlib_helper(payload)
+            )
+
+    message = build_report_message(
+        scan_time=scan_time,
+        wallet_summary=wallet,
+        campaigns=campaigns_to_notify,
+        source_health=source_health,
+        errors=errors,
+    )
+
+    telegram_result: Optional[Dict[str, Any]] = None
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    if bot_token and chat_id:
+        telegram_result = notify(bot_token, chat_id, message)
+        if not telegram_result.get("sent"):
+            logger.warning(
+                "Telegram notification did not send: %s",
+                telegram_result.get("error"),
+            )
+    else:
+        logger.info("Telegram not configured; printing report summary only")
         print(message)
-        return
-    url = f'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage'
-    response = requests.post(url, json={'chat_id':CHAT_ID,'text':message[:4000],'disable_web_page_preview':True}, timeout=TIMEOUT)
-    response.raise_for_status()
 
-def main():
-    findings = scan_feeds()
-    balance = wallet_balance()
-    report = {'time_utc':datetime.now(timezone.utc).isoformat(), 'wallet_sol':balance, 'campaigns':findings}
-    with open('latest_report.json', 'w', encoding='utf-8') as f:
-        json.dump(report, f, ensure_ascii=False, indent=2)
-    lines = ['LUMAVUN Crypto Agent V1', f'Kampanye terdeteksi: {len(findings)}', f'Saldo SOL: {balance if balance is not None else "belum tersedia"}', 'Semua peluang wajib diverifikasi manual; tidak ada klaim otomatis.']
-    for item in findings[:5]:
-        lines.append(f"- {item['title']} | {item['url']}" + (' | RED FLAG' if item['flags'] else ''))
-    notify('\n'.join(lines))
+    report = build_report(
+        scan_time=scan_time,
+        campaigns=campaigns,
+        source_health=source_health,
+        wallet=wallet,
+        errors=errors,
+        telegram_result=telegram_result,
+        duplicates_skipped=len(duplicates_skipped),
+    )
 
-if __name__ == '__main__':
-    main()
+    json_path = write_json_report(report)
+    md_path = write_markdown_report(report)
+
+    logger.info(
+        "Report written: %s, %s | campaigns=%d errors=%d telegram_sent=%s",
+        json_path,
+        md_path,
+        len(campaigns),
+        len(errors),
+        telegram_result.get("sent") if telegram_result else None,
+    )
+    for err in errors:
+        print(f"WARN: {err}")
+    if wallet.get("diagnostics"):
+        print(f"WARN: wallet: {wallet['diagnostics']}")
+    return 0
+
+
+def hashlib_helper(payload: Dict[str, Any]) -> str:
+    """Small helper to avoid a top-level import of hashlib in main."""
+    import hashlib
+
+    parts = [
+        str(payload.get("title", "")).strip().lower(),
+        str(payload.get("source", "")).strip().lower(),
+        str(payload.get("url", "")).strip().lower(),
+    ]
+    return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+if __name__ == "__main__":
+    sys.exit(main())
