@@ -1,4 +1,4 @@
-name: LUMAVUN Crypto Agent V1.1
+name: LUMAVUN Crypto Agent V1.2
 on:
   workflow_dispatch:
   schedule:
@@ -6,31 +6,74 @@ on:
 permissions:
   contents: read
   actions: read
+concurrency:
+  group: lumavun-crypto-agent
+  cancel-in-progress: false
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     env:
       LUMAVUN_REQUEST_TIMEOUT: '20'
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
+
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+
       - name: Run tests
         run: python -m pytest tests -v
-      - name: Download previous dedup state
+
+      # The dedup state must come from a PREVIOUS run. actions/download-artifact
+      # defaults to the current run, which has no state yet, so this uses the
+      # GitHub CLI to locate the newest other successful run and pull its
+      # dedup_state artifact explicitly.
+      - name: Restore dedup state from previous run
         id: dedup_in
         continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: dedup_state
-          path: ./
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          CURRENT_RUN: ${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          echo "Current run: $CURRENT_RUN"
+          PREV="$(gh run list \
+            --repo "$REPO" \
+            --workflow agent.yml \
+            --status success \
+            --limit 30 \
+            --json databaseId \
+            --jq "[.[].databaseId] | map(select(. != (${CURRENT_RUN} | tonumber))) | .[0] // empty")"
+
+          if [ -z "$PREV" ]; then
+            echo "No earlier successful run found. This is the first run; dedup state starts empty."
+            echo "state_source=none" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Restoring dedup_state from run $PREV"
+          if gh run download "$PREV" --repo "$REPO" --name dedup_state --dir .; then
+            if [ -f dedup_state.json ]; then
+              echo "Restored dedup_state.json ($(wc -c < dedup_state.json) bytes) from run $PREV"
+              echo "state_source=run:$PREV" >> "$GITHUB_OUTPUT"
+            else
+              echo "::warning::Artifact from run $PREV contained no dedup_state.json"
+              echo "state_source=run:$PREV-empty" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "::warning::Could not download dedup_state from run $PREV; starting empty."
+            echo "state_source=run:$PREV-failed" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run agent
         id: run
         run: python src/main.py
@@ -41,6 +84,9 @@ jobs:
           SOLANA_RPC_FALLBACK_URLS: ${{ vars.SOLANA_RPC_FALLBACK_URLS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+      # Reports and state are uploaded even when the agent fails, so a broken
+      # run still leaves diagnostics behind.
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -50,6 +96,9 @@ jobs:
             latest_report.json
             latest_report.md
           retention-days: 7
+          if-no-files-found: warn
+          overwrite: true
+
       - name: Upload dedup state
         if: always()
         uses: actions/upload-artifact@v4
@@ -57,9 +106,20 @@ jobs:
           name: dedup_state
           path: dedup_state.json
           retention-days: 7
-      - name: Report failure summary
-        if: steps.run.outcome == 'failure' || steps.run.outcome == 'cancelled'
+          if-no-files-found: warn
+          overwrite: true
+
+      - name: Summarize run
+        if: always()
+        env:
+          STATE_SOURCE: ${{ steps.dedup_in.outputs.state_source }}
+          RUN_OUTCOME: ${{ steps.run.outcome }}
         run: |
-          echo "## Run outcome" >> $GITHUB_STEP_SUMMARY
-          echo "Agent run outcome: ${{ steps.run.outcome }}" >> $GITHUB_STEP_SUMMARY
-          echo "Reports may still be available in the latest_report artifact." >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## LUMAVUN Crypto Agent V1.2"
+            echo ""
+            echo "- Dedup state source: \`${STATE_SOURCE:-unknown}\`"
+            echo "- Agent step outcome: \`${RUN_OUTCOME:-skipped}\`"
+            echo "- Reports artifact: \`latest_report\`"
+            echo "- Dedup artifact: \`dedup_state\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,6 +1,7 @@
 import pytest
 import requests
 import requests_mock
+
 from wallet import (
     validate_solana_address,
     read_wallet,
@@ -8,15 +9,37 @@ from wallet import (
     check_rpc_health,
 )
 
+# A real, well-formed Solana Ed25519 public key (44 chars, 32 decoded bytes).
+VALID_PHANTOM_ADDRESS = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+
+# Base58 that is alphabet-valid and 43 characters long, but decodes to only
+# 31 bytes. This is the case the 32-byte length check exists to catch.
+BASE58_31_BYTES = "2aNsVvhbn7baZeiMTcAhgvVFzicwhyDwcSxNxMM8rf2"
+
 
 class TestValidateAddress:
-    def test_valid_base58(self):
-        assert validate_solana_address("7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU") is True
+    def test_accepts_valid_base58_32_byte_address(self):
+        assert validate_solana_address(VALID_PHANTOM_ADDRESS) is True
 
-    def test_invalid_when_short(self):
+    def test_accepts_address_with_surrounding_whitespace(self):
+        assert validate_solana_address(f"  {VALID_PHANTOM_ADDRESS}  ") is True
+
+    def test_rejects_base58_that_decodes_to_wrong_byte_length(self):
+        # Passes the character-class/length prefilter but is 31 bytes, so the
+        # decode-based length check must reject it.
+        import re
+
+        assert re.match(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$", BASE58_31_BYTES)
+        assert validate_solana_address(BASE58_31_BYTES) is False
+
+    def test_rejects_short_string(self):
         assert validate_solana_address("Abc123") is False
 
-    def test_rejects_empty(self):
+    def test_rejects_non_base58_characters(self):
+        # '0', 'O', 'I' and 'l' are not in the Base58 alphabet.
+        assert validate_solana_address("0OIl" + VALID_PHANTOM_ADDRESS[4:]) is False
+
+    def test_rejects_empty_and_none(self):
         assert validate_solana_address("") is False
         assert validate_solana_address(None) is False
 
@@ -36,14 +59,18 @@ class TestRpcHealth:
     def test_unhealthy_endpoint_http_error(self):
         with requests_mock.Mocker() as m:
             m.post("https://rpc.example.com", exc=requests.exceptions.HTTPError)
-            healthy, msg = check_rpc_health("https://rpc.example.com")
+            healthy, _ = check_rpc_health("https://rpc.example.com")
         assert healthy is False
 
     def test_rpc_error_in_response(self):
         with requests_mock.Mocker() as m:
             m.post(
                 "https://rpc.example.com",
-                json={"jsonrpc": "2.0", "error": {"code": -32005, "message": "rate limited"}, "id": 1},
+                json={
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32005, "message": "rate limited"},
+                    "id": 1,
+                },
                 status_code=200,
             )
             healthy, msg = check_rpc_health("https://rpc.example.com")
@@ -52,29 +79,43 @@ class TestRpcHealth:
 
 
 class TestGetSolBalance:
-    def test_returns_nan_solana_on_success(self):
+    def test_returns_balance_on_success(self):
         with requests_mock.Mocker() as m:
             m.post(
                 "https://rpc.example.com",
                 json={"jsonrpc": "2.0", "result": {"value": 500000000}, "id": 1},
                 status_code=200,
             )
-            sol = get_sol_balance("7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU", "https://rpc.example.com")
+            sol = get_sol_balance(VALID_PHANTOM_ADDRESS, "https://rpc.example.com")
         assert sol == pytest.approx(0.5)
+
+    def test_zero_lamports_returns_zero_not_none(self):
+        with requests_mock.Mocker() as m:
+            m.post(
+                "https://rpc.example.com",
+                json={"jsonrpc": "2.0", "result": {"value": 0}, "id": 1},
+                status_code=200,
+            )
+            sol = get_sol_balance(VALID_PHANTOM_ADDRESS, "https://rpc.example.com")
+        assert sol is not None
+        assert sol == pytest.approx(0.0)
 
     def test_returns_none_on_rpc_error(self):
         with requests_mock.Mocker() as m:
             m.post(
                 "https://rpc.example.com",
-                json={"jsonrpc": "2.0", "error": {"code": -32005, "message": "rate limited"}, "id": 1},
+                json={
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32005, "message": "rate limited"},
+                    "id": 1,
+                },
                 status_code=200,
             )
-            sol = get_sol_balance("7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU", "https://rpc.example.com")
+            sol = get_sol_balance(VALID_PHANTOM_ADDRESS, "https://rpc.example.com")
         assert sol is None
 
     def test_returns_none_for_invalid_address(self):
-        sol = get_sol_balance("not-an-address", "https://rpc.example.com")
-        assert sol is None
+        assert get_sol_balance("not-an-address", "https://rpc.example.com") is None
 
 
 class TestReadWallet:
@@ -82,7 +123,11 @@ class TestReadWallet:
         with requests_mock.Mocker() as m:
             m.post("https://primary.example", exc=requests.exceptions.ConnectionError)
             m.post("https://fallback.example", exc=requests.exceptions.HTTPError)
-            wallet = read_wallet("7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU", "https://primary.example", ["https://fallback.example"])
+            wallet = read_wallet(
+                VALID_PHANTOM_ADDRESS,
+                "https://primary.example",
+                ["https://fallback.example"],
+            )
         assert wallet["sol_balance"] is None
         assert wallet["address_valid"] is True
         assert "unhealthy" in wallet["diagnostics"].lower()
@@ -98,3 +143,63 @@ class TestReadWallet:
         assert wallet["sol_balance"] is None
         assert wallet["address_valid"] is False
         assert "Invalid" in wallet["diagnostics"]
+
+    def test_healthy_rpc_with_zero_balance_reports_zero_sol(self):
+        """RPC success + zero balance must read as 0 SOL, not 'unavailable'.
+
+        This is the core V1.2 wallet requirement: an empty wallet is a real
+        result, not an RPC failure.
+        """
+        with requests_mock.Mocker() as m:
+            m.post(
+                "https://rpc.example.com",
+                [
+                    # 1) getHealth
+                    {"json": {"jsonrpc": "2.0", "result": {"epoch": "1"}, "id": 1}, "status_code": 200},
+                    # 2) getBalance -> 0 lamports, a successful response
+                    {"json": {"jsonrpc": "2.0", "result": {"value": 0}, "id": 1}, "status_code": 200},
+                    # 3) getTokenAccountsByOwner -> no token accounts
+                    {"json": {"jsonrpc": "2.0", "result": {"value": []}, "id": 1}, "status_code": 200},
+                ],
+            )
+            wallet = read_wallet(VALID_PHANTOM_ADDRESS, "https://rpc.example.com", [])
+
+        assert wallet["address_valid"] is True
+        assert wallet["sol_balance"] is not None
+        assert wallet["sol_balance"] == pytest.approx(0.0)
+        assert wallet["spl_token_count"] == 0
+        assert "failed" not in wallet["diagnostics"].lower()
+
+    def test_healthy_rpc_with_balance_reports_value(self):
+        with requests_mock.Mocker() as m:
+            m.post(
+                "https://rpc.example.com",
+                [
+                    {"json": {"jsonrpc": "2.0", "result": {"epoch": "1"}, "id": 1}, "status_code": 200},
+                    {"json": {"jsonrpc": "2.0", "result": {"value": 1250000000}, "id": 1}, "status_code": 200},
+                    {"json": {"jsonrpc": "2.0", "result": {"value": []}, "id": 1}, "status_code": 200},
+                ],
+            )
+            wallet = read_wallet(VALID_PHANTOM_ADDRESS, "https://rpc.example.com", [])
+
+        assert wallet["sol_balance"] == pytest.approx(1.25)
+
+    def test_fallback_endpoint_used_when_primary_fails(self):
+        with requests_mock.Mocker() as m:
+            m.post("https://primary.example", exc=requests.exceptions.ConnectionError)
+            m.post(
+                "https://fallback.example",
+                [
+                    {"json": {"jsonrpc": "2.0", "result": {"epoch": "9"}, "id": 1}, "status_code": 200},
+                    {"json": {"jsonrpc": "2.0", "result": {"value": 0}, "id": 1}, "status_code": 200},
+                    {"json": {"jsonrpc": "2.0", "result": {"value": []}, "id": 1}, "status_code": 200},
+                ],
+            )
+            wallet = read_wallet(
+                VALID_PHANTOM_ADDRESS,
+                "https://primary.example",
+                ["https://fallback.example"],
+            )
+
+        assert wallet["used_rpc"] == "https://fallback.example"
+        assert wallet["sol_balance"] == pytest.approx(0.0)

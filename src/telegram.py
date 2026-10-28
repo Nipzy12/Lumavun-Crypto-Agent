@@ -104,16 +104,29 @@ def _mask_response(data: Any) -> Any:
     return data
 
 
+def _as_mapping(item: Any) -> Dict[str, Any]:
+    """Normalize a SourceHealth dataclass or plain dict into a dict.
+
+    Callers pass either parsed JSON dicts or dataclass instances, so this
+    keeps the message builder tolerant of both shapes.
+    """
+    if isinstance(item, dict):
+        return item
+    if hasattr(item, "__dict__"):
+        return dict(vars(item))
+    return {}
+
+
 def build_report_message(
     scan_time: str,
     wallet_summary: Dict[str, Any],
     campaigns: Sequence[Dict[str, Any]],
-    source_health: Sequence[Dict[str, Any]],
+    source_health: Sequence[Any],
     errors: Sequence[str],
 ) -> str:
     """Build a readable Indonesian notification message."""
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.1")
+    lines.append("LUMAVUN Crypto Agent V1.2")
     lines.append("")
     lines.append(f"Waktu scan: {scan_time}")
     lines.append("")
@@ -134,8 +147,9 @@ def build_report_message(
     lines.append("")
 
     # Source health
-    reachable = sum(1 for s in source_health if s.get("reachable"))
-    total_sources = len(source_health) or 1
+    sources = [_as_mapping(s) for s in source_health]
+    reachable = sum(1 for s in sources if s.get("reachable"))
+    total_sources = len(sources) or 1
     lines.append(f"Sumber feed: {reachable}/{total_sources} berhasil diakses")
     lines.append("")
 

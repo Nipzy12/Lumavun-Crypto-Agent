@@ -1,8 +1,17 @@
-# LUMAVUN Crypto Agent V1.1 V1.1 V1.1
+# LUMAVUN Crypto Agent V1.2
 
 A zero-deposit, read-only prototype for monitoring configured RSS feeds for possible airdrop campaigns, checking a Solana wallet's SOL and SPL token balances, and sending Telegram reports.
 
 **No automatic claiming, wallet signing, trades, or guaranteed rewards.**
+
+## What's new in V1.2
+
+- **Solana address validation is now real.** Addresses are Base58-decoded and the decoded payload must be exactly 32 bytes (Ed25519 pubkey). Previously a 32–44 character regex match was enough, which accepted strings that were not valid public keys.
+- **An empty wallet is no longer confused with an RPC failure.** A successful `getBalance` response of `0` lamports is reported as `0 SOL`. `tidak tersedia` / unavailable is reserved for requests that actually failed.
+- **Three verified default feeds** ship in `config/vetted_sources.yaml`, each HTTP-checked (status, content type, feed format, newest entry). Dead and stale candidates are recorded under `rejected_sources` so they are not re-added.
+- **Dedup state is restored from the previous run.** `actions/download-artifact` defaults to the *current* run, so V1.1 never saw earlier state. The workflow now locates the newest previous successful run with the GitHub CLI and downloads its `dedup_state` artifact explicitly.
+- **Python failures now fail the workflow.** The agent step has no `continue-on-error`; a non-zero exit fails the job. Reports and dedup state still upload on failure via `if: always()`.
+- **84 automated tests**, including a structural test of the workflow file itself.
 
 ## What's new in V1.1
 
@@ -20,7 +29,7 @@ A zero-deposit, read-only prototype for monitoring configured RSS feeds for poss
 2. Create a dedicated Phantom wallet and **copy only its public Solana address**. Never share or upload recovery phrases or private keys.
 3. In GitHub repository **Settings → Secrets and variables → Actions → Variables**, add:
    - `PHANTOM_PUBLIC_ADDRESS`: public Solana address of the read-only monitoring wallet.
-   - `AIRDROP_RSS_FEEDS`: comma-separated HTTPS RSS/Atom feed URLs you trust and are allowed to access. Empty by default; no feed means no campaign results.
+   - `AIRDROP_RSS_FEEDS`: comma-separated HTTPS RSS/Atom feed URLs you trust and are allowed to access. Optional in V1.2 — leave it empty to use the three verified default feeds listed below.
    - Optional `SOLANA_RPC_URL`: your authorized Solana JSON-RPC endpoint. Defaults to a public mainnet endpoint, which may rate-limit requests.
    - Optional `SOLANA_RPC_FALLBACK_URLS`: comma-separated fallback RPC endpoints used when the primary endpoint fails.
 4. Create a Telegram bot with @BotFather. Message your bot, then obtain your `chat_id` from `getUpdates` on the Telegram Bot API. Treat the bot token as a password.
@@ -32,6 +41,30 @@ A zero-deposit, read-only prototype for monitoring configured RSS feeds for poss
 ## Vetted sources configuration
 
 `config/vetted_sources.yaml` documents the sources, keywords, and risk rules the agent uses when `AIRDROP_RSS_FEEDS` is not set or as a reference for operators. The agent validates every configured URL before use and skips unavailable feeds with a logged warning. It never invents campaigns or rewards.
+
+### Verified default feeds (V1.2)
+
+Each URL below was requested over HTTPS with a normal `GET` during V1.2 development. The table records what was actually observed, not what the sites claim.
+
+| Source | HTTP | Format | Entries | Newest entry at check | Focus |
+|---|---|---|---|---|---|
+| `https://airdropalert.com/feed/rssfeed` | 200 | RSS 2.0 | 100 | 2026-10-27 | Dedicated airdrop campaign listings, incl. quest/task steps |
+| `https://airdrops.io/feed/` | 200 | RSS 2.0 | 10 | 2026-10-02 | Airdrop guides, points programs, testnet farming |
+| `https://decrypt.co/feed` | 200 | RSS 2.0 (`application/xml`) | 35 | 2026-10-28 | Crypto newsroom; covers airdrops and testnets among general news |
+
+Two of these are airdrop-focused; `decrypt.co` is a general newsroom feed that carries airdrop and testnet coverage alongside unrelated market news, so most of its entries will not match campaign keywords.
+
+Sources that failed verification are listed under `rejected_sources` in the same file, with the observed status, so they are not re-added by guesswork:
+
+| Rejected source | Why |
+|---|---|
+| `https://coinmarketcap.com/headlines/rss/` | HTTP 404 (HTML, not a feed) |
+| `https://coinmarketcap.com/community/articles/feed/` | HTTP 404 |
+| `https://www.reddit.com/r/airdrops/.rss` | HTTP 200 Atom, but newest entry was from 2025 — over a year stale |
+| `https://airdrops.io/tag/testnet/feed/` | HTTP 410 Gone |
+| `https://airdrops.io/blog/feed/` | HTTP 410 Gone |
+
+Feed availability and content change over time. Re-run the verification before relying on these in production.
 
 ## How discovery works
 
@@ -69,12 +102,13 @@ A `LOW_RISK_INDICATORS` result only means fewer heuristic red flags were detecte
 
 The monitor reads balances through Solana JSON-RPC:
 
-- Validates the public address format before querying.
+- Validates the address by Base58-decoding it and requiring exactly 32 decoded bytes. A string can look plausible and still fail this check; that is the point.
 - Queries native SOL balance.
 - Queries read-only SPL token balances when configured.
 - Uses a primary RPC endpoint with configurable fallback endpoints.
 - Handles timeouts, HTTP errors, malformed responses, and explicit RPC errors.
-- Shows `unavailable` when a query fails instead of reporting zero.
+- Reports `0 SOL` when the RPC succeeds and the account holds no lamports — an empty wallet is a real answer, not a failure.
+- Reports `tidak tersedia` / unavailable only when the RPC request itself failed, so a network problem is never disguised as a zero balance.
 - Never requests, generates, or stores seed phrases, private keys, or signing credentials.
 
 ## Telegram notifications
@@ -90,7 +124,22 @@ If Telegram fails, the agent still saves `latest_report.json` and `latest_report
 
 ## Persistent state
 
-GitHub Actions runners are ephemeral, so the agent persists deduplication state through a workflow artifact. On each run it downloads the previous `dedup_state.json` artifact when present, updates it, and uploads the new version alongside the reports. This is a documented, conservative approach with minimal permissions and safe concurrent-run behavior.
+GitHub Actions runners are ephemeral, so the agent persists deduplication state through a workflow artifact.
+
+**How it works in V1.2.** `actions/download-artifact` reads artifacts from the *current* run unless you pass an explicit `run-id`. In V1.1 it was used without one, so it found nothing and every run started from an empty state — dedup never actually worked across runs. The workflow now:
+
+1. Lists the most recent successful runs of `agent.yml` via the GitHub CLI.
+2. Excludes the current run ID.
+3. Downloads the newest other run's `dedup_state` artifact into the workspace.
+
+On a first run (no earlier success) it logs that state starts empty and continues. The restore step is non-fatal, so a missing artifact never blocks the scan. Verified locally with two back-to-back runs:
+
+| Run | Campaigns reported | Duplicates skipped | State entries |
+|---|---|---|---|
+| 1 (no prior state) | 20 | 0 | 20 |
+| 2 (state from run 1) | 0 | 20 | 20 |
+
+The `concurrency` group keeps scheduled runs from overlapping, since two concurrent runs would race on the same artifact.
 
 ## Reports
 
@@ -115,9 +164,37 @@ pip install -r requirements-dev.txt
 python -m pytest tests -v
 ```
 
+Current suite: **84 passing tests** across wallet validation, zero-balance handling, feed discovery, dedup across two runs, state persistence, Telegram message building, config, reports, and the workflow file structure.
+
+A local run writes `latest_report.json`, `latest_report.md`, and `dedup_state.json` into the working directory. All three are gitignored; they are upload artifacts, not source.
+
 ## GitHub Actions
 
-The workflow keeps `workflow_dispatch` and twice-daily scheduling. It uploads reports even when a noncritical integration such as Telegram fails. It uses minimum necessary permissions, timeouts, and safe error handling.
+The workflow keeps `workflow_dispatch` and twice-daily scheduling. Step order is: install → **pytest** → restore dedup state → run agent → upload reports → upload state → summary.
+
+Failure behaviour is deliberate:
+
+- The `Run agent` step has **no** `continue-on-error`. A non-zero Python exit fails the job, so a broken scan shows red instead of green.
+- The `Run tests` step has no `continue-on-error` either; a failing test blocks the scan.
+- Only the **state restore** step is allowed to fail, because the first run legitimately has no prior artifact.
+- Reports and `dedup_state.json` upload with `if: always()`, so a failed run still leaves diagnostics behind.
+
+Permissions stay minimal (`contents: read`, `actions: read`). `actions: read` is required for the state restore to query previous runs.
+
+### GitHub configuration to review
+
+No new secrets are needed for V1.2. Confirm these exist under **Settings → Secrets and variables → Actions**:
+
+| Kind | Name | Required | Notes |
+|---|---|---|---|
+| Variable | `PHANTOM_PUBLIC_ADDRESS` | Yes | Public Solana address only. Must Base58-decode to 32 bytes; a malformed value now reports `Invalid Solana address format` instead of silently querying. |
+| Variable | `AIRDROP_RSS_FEEDS` | No | Comma-separated HTTPS feeds. **Leave empty to use the three verified defaults.** Setting it overrides them. |
+| Variable | `SOLANA_RPC_URL` | No | Authorized RPC endpoint. Public mainnet is rate-limited. |
+| Variable | `SOLANA_RPC_FALLBACK_URLS` | No | Comma-separated fallbacks. |
+| Secret | `TELEGRAM_BOT_TOKEN` | No | Omit to run without notifications; reports still write. |
+| Secret | `TELEGRAM_CHAT_ID` | No | Same as above. |
+
+No new permissions or workflow settings need enabling. If the repository previously had `AIRDROP_RSS_FEEDS` set to `[]` or to the old empty behaviour, clear it so the verified defaults apply.
 
 ## Security
 
@@ -127,9 +204,11 @@ Never commit credentials, wallet secrets, or seed phrases. Use repository secret
 
 - This is a functional scaffold, not a production airdrop intelligence engine. It only searches RSS feeds you provide using keyword matching; it does not discover every airdrop or verify legitimacy.
 - Risk flags are heuristic and do not certify safety. Never approve wallet signatures based only on this output.
-- Wallet monitoring reads native SOL balance and, where supported, SPL token balances. It does not detect airdrop eligibility.
+- Wallet monitoring reads native SOL balance and, where supported, SPL token balances. It does not detect airdrop eligibility. A successful RPC call that returns zero lamports is shown as 0 SOL; "unavailable" is used only when the RPC request itself fails.
+- Address validation now checks Base58 decoding and a 32-byte decoded length; typos and wrong-length public addresses are rejected.
 - The workflow may be delayed, rate-limited, disabled due to repository inactivity, or affected by provider free-tier changes.
-- Deduplication across runs depends on the `dedup_state.json` artifact being present; the first run has no prior state.
+- Deduplication across runs depends on the `dedup_state.json` artifact being present from a previous run; the first run has no prior state.
+- Feed content changes over time; periodically re-verify default feed URLs.
 
 ## Local development snapshot
 

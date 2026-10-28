@@ -5,3 +5,9 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Run artifacts. These are produced by the agent and uploaded by the
+# workflow; they are never committed.
+latest_report.json
+latest_report.md
+dedup_state.json

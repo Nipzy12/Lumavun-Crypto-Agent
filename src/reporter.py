@@ -26,7 +26,7 @@ def build_report(
 ) -> Dict[str, Any]:
     """Build the machine-readable report dict."""
     return {
-        "agent": "LUMAVUN Crypto Agent V1.1",
+        "agent": "LUMAVUN Crypto Agent V1.2",
         "scan_time_utc": scan_time,
         "wallet": wallet,
         "source_health": [
@@ -92,7 +92,7 @@ def write_json_report(report: Dict[str, Any], path: Optional[Path] = None) -> Pa
 def write_markdown_report(report: Dict[str, Any], path: Optional[Path] = None) -> Path:
     target = path or Path("latest_report.md")
     lines: List[str] = []
-    lines.append("# LUMAVUN Crypto Agent V1.1 — Laporan Scan")
+    lines.append("# LUMAVUN Crypto Agent V1.2 — Laporan Scan")
     lines.append("")
     lines.append(f"- **Waktu scan (UTC):** {report.get('scan_time_utc', 'tidak tersedia')}")
     lines.append("")
@@ -172,7 +172,7 @@ def write_markdown_report(report: Dict[str, Any], path: Optional[Path] = None) -
 
     lines.append("---")
     lines.append("")
-    lines.append("*LUMAVUN Crypto Agent V1.1 — baca-only, tanpa klaim, tanda tangan, atau setoran otomatis.*")
+    lines.append("*LUMAVUN Crypto Agent V1.2 — baca-only, tanpa klaim, tanda tangan, atau setoran otomatis.*")
 
     with open(target, "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines))

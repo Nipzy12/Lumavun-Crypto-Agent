@@ -32,6 +32,14 @@ from telegram import (
 )
 from wallet import read_wallet
 
+# Reports contain Indonesian text and status emoji. Force UTF-8 so a
+# non-UTF-8 console (for example a Windows cp1252 shell) cannot crash the run.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
 logging.basicConfig(
     level=os.getenv("LUMAVUN_LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -49,7 +57,7 @@ def _env_list(name: str) -> List[str]:
 
 
 def main() -> int:
-    logger.info("LUMAVUN Crypto Agent V1.1 starting")
+    logger.info("LUMAVUN Crypto Agent V1.2 starting")
     scan_time = datetime.now(timezone.utc).isoformat()
     config = load_config()
 

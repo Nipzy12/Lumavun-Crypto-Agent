@@ -1,10 +1,14 @@
 """
-Phantom wallet monitor.
+Phantom wallet monitor (V1.2).
 
 Reads native SOL balance and, where supported, read-only SPL token
-balances through Solana JSON-RPC. It validates addresses, handles errors
-and rate limits, supports configurable fallback endpoints, and never
-requests or stores secrets.
+balances through Solana JSON-RPC. It validates addresses with Base58
+decoding and a 32-byte length check, handles errors and rate limits,
+supports configurable fallback endpoints, and never requests or stores
+secrets.
+
+A successful RPC response with a zero balance is reported as 0 SOL, not
+as unavailable. "Unavailable" is reserved for failed requests.
 """
 
 from __future__ import annotations
@@ -21,14 +25,26 @@ ADDRESS_REGEX = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
 
 
 def validate_solana_address(address: str) -> bool:
-    """Validate a public Solana address format.
+    """Validate a public Solana address.
 
-    This is a format check only. It does not verify ownership or whether
-    the address is funded.
+    Checks Base58 alphabet, then decodes and verifies the decoded payload
+    is exactly 32 bytes (Ed25519 pubkey). This accepts real Phantom public
+    addresses and rejects typos, wrong-length strings, and non-Base58 text.
     """
     if not address:
         return False
-    return bool(ADDRESS_REGEX.match(address.strip()))
+    raw = address.strip()
+    if not ADDRESS_REGEX.match(raw):
+        return False
+    try:
+        from base58 import b58decode
+        decoded = b58decode(raw)
+    except Exception:
+        return False
+    # Solana Ed25519 pubkeys are 32 bytes.
+    if len(decoded) != 32:
+        return False
+    return True
 
 
 def _rpc_post(
@@ -93,8 +109,8 @@ def get_sol_balance(
 ) -> Optional[float]:
     """Read native SOL balance for a public address.
 
-    Returns None when the request fails, so the report can show
-    'unavailable' instead of zero.
+    Returns the balance as a float (which may be 0.0 when the RPC succeeds
+    and the account has no lamports), or None only when the request fails.
     """
     if not validate_solana_address(address):
         return None
@@ -197,7 +213,9 @@ def read_wallet(
     """Read SOL balance with fallback endpoints and diagnostics.
 
     Returns a dict with balance information plus a health/diagnostic
-    summary. Missing values are reported as None, not zero.
+    summary. A successful RPC call that returns a zero balance is reported
+    as 0.0 SOL. "Unavailable" is used only when the RPC request itself
+    fails.
     """
     if not address:
         return {

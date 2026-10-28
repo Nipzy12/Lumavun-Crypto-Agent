@@ -72,3 +72,18 @@ def effective_feeds() -> list[str]:
         return [x.strip() for x in env_feeds.split(",") if x.strip()]
     config = load_config()
     return [str(x).strip() for x in config.get("default_feeds", []) if str(x).strip()]
+
+
+def known_sources() -> Dict[str, Any]:
+    """Return the vetted-sources documentation block for reference in
+    reports and README. Does not add feeds; it is documentary only.
+    """
+    config = load_config()
+    return {
+        "version": config.get("version", "1.1"),
+        "default_feeds": config.get("default_feeds", []),
+        "discovery": config.get("discovery", {}),
+        "risk_rules": config.get("risk_rules", []),
+        "rpc": config.get("rpc", {}),
+        "dedup": config.get("dedup", {}),
+    }

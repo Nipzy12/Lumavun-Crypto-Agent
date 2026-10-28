@@ -78,6 +78,41 @@ class TestMessageBuild:
         assert "deposit_required" in msg
 
 
+class TestMessageBuildAcceptsDataclasses:
+    """Regression: main.py passes SourceHealth dataclasses, not dicts.
+
+    build_report_message previously called .get() on them and crashed the
+    whole run after a successful scan.
+    """
+
+    def test_source_health_dataclasses_are_accepted(self):
+        from discovery import SourceHealth
+
+        msg = build_report_message(
+            scan_time="2026-01-01T00:00:00+00:00",
+            wallet_summary={"sol_balance": 0.0, "spl_token_count": 0},
+            campaigns=[],
+            source_health=[
+                SourceHealth(url="https://a.example/rss", reachable=True, entries_analyzed=5),
+                SourceHealth(url="https://b.example/rss", reachable=False, error="timeout"),
+            ],
+            errors=[],
+        )
+        assert "1/2" in msg
+        assert "Saldo SOL: 0.000000 SOL" in msg
+
+    def test_zero_balance_renders_as_zero_sol(self):
+        msg = build_report_message(
+            scan_time="2026-01-01T00:00:00+00:00",
+            wallet_summary={"sol_balance": 0.0, "spl_token_count": 0},
+            campaigns=[],
+            source_health=[],
+            errors=[],
+        )
+        assert "0.000000 SOL" in msg
+        assert "tidak tersedia" not in msg.split("Jumlah aset")[0]
+
+
 class TestDuplicatePrevention:
     def test_identical_campaign_skipped(self):
         prev = [

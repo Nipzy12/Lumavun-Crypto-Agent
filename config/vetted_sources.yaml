@@ -1,4 +1,4 @@
-# LUMAVUN Crypto Agent V1.1 — vetted sources configuration
+# LUMAVUN Crypto Agent V1.2 — vetted sources configuration
 #
 # This file documents the sources, keywords, and risk rules the agent uses.
 # It is a reference for operators and a fallback reference when
@@ -7,12 +7,78 @@
 #
 # Do not add feeds you are not allowed to access or that violate terms.
 # This file does not grant permission to scrape any site.
+# Sources here were HTTP-verified during V1.2 development; verify them
+# periodically because feed availability and content can change.
 
-version: "1.1"
+version: "1.2"
 
 # Default RSS/Atom feeds used only when AIRDROP_RSS_FEEDS is empty.
-# Replace or extend these with sources you trust and are allowed to access.
-default_feeds: []
+# These are publicly reachable HTTPS feeds that were HTTP-verified during
+# V1.2. They are listed as documentation; the agent does not invent
+# campaigns or rewards and honors AIRDROP_RSS_FEEDS from Variables first.
+default_feeds:
+  - https://airdropalert.com/feed/rssfeed
+  - https://airdrops.io/feed/
+  - https://decrypt.co/feed
+
+# Verification record for the feeds above. Every URL below was requested
+# over HTTPS with a normal GET during V1.2 development and returned 200
+# with a parseable RSS/Atom body. Nothing here is guessed.
+verified_sources:
+  - url: https://airdropalert.com/feed/rssfeed
+    http_status: 200
+    content_type: application/rss+xml
+    feed_format: RSS 2.0
+    entries_at_check: 100
+    newest_entry: "Tue, 27 Oct 2026 19:15:52 +0000"
+    focus: "Dedicated airdrop campaign listings, including quest and task steps"
+    notes: >
+      Third-party listing. Entries are campaign claims, not first-party
+      proof; verify reward details with the project before acting.
+
+  - url: https://airdrops.io/feed/
+    http_status: 200
+    content_type: application/rss+xml
+    feed_format: RSS 2.0
+    entries_at_check: 10
+    newest_entry: "Fri, 02 Oct 2026 16:59:32 +0000"
+    focus: "Airdrop guides, points programs, and testnet farming write-ups"
+    notes: >
+      Editorial/guide feed. Publishes less often than the listings feed,
+      so a quiet period here is normal.
+
+  - url: https://decrypt.co/feed
+    http_status: 200
+    content_type: application/xml
+    feed_format: RSS 2.0
+    entries_at_check: 35
+    newest_entry: "Wed, 28 Oct 2026 12:16:30 +0000"
+    focus: "Crypto news coverage, including airdrop and testnet announcements"
+    notes: >
+      General newsroom feed, not airdrop-dedicated. It surfaces token
+      generation events and testnet launches but also carries unrelated
+      market news, so most entries will not match campaign keywords.
+
+# Feeds that were tested and REJECTED. Kept so nobody re-adds them by
+# mistake or assumes they work.
+rejected_sources:
+  - url: https://coinmarketcap.com/headlines/rss/
+    http_status: 404
+    reason: "Returns HTML 404, not a feed."
+  - url: https://coinmarketcap.com/community/articles/feed/
+    http_status: 404
+    reason: "Returns HTML 404, not a feed."
+  - url: https://www.reddit.com/r/airdrops/.rss
+    http_status: 200
+    reason: >
+      Valid Atom feed, but the newest entry at check time was from 2025,
+      over a year stale. Not usable as a live campaign source.
+  - url: https://airdrops.io/tag/testnet/feed/
+    http_status: 410
+    reason: "Tag feeds are gone (HTTP 410)."
+  - url: https://airdrops.io/blog/feed/
+    http_status: 410
+    reason: "Legacy blog feed is gone (HTTP 410)."
 
 # Keywords used to decide whether a feed entry is worth extracting.
 # Matching is case-insensitive and only uses the feed text the provider

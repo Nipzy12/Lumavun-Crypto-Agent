@@ -13,20 +13,20 @@ State files are kept small and free of secrets.
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 ARTIFACT_NAME = "dedup_state"
 STATE_FILENAME = "dedup_state.json"
+STATE_VERSION = "1.2"
 MAX_ENTRIES = 200
 STALE_DAYS = 7
 
 
 def default_state() -> Dict[str, Any]:
     return {
-        "version": "1.1",
+        "version": STATE_VERSION,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "seen": {},
     }
@@ -74,7 +74,11 @@ def _sanitize_state(data: Any) -> Dict[str, Any]:
                     k: v for k, v in value.items()
                     if isinstance(k, str) and isinstance(v, (str, int, float, bool))
                 }
-        data = {"version": "1.1", "updated_at": data.get("updated_at", ""), "seen": sanitized_seen}
+        data = {
+            "version": STATE_VERSION,
+            "updated_at": data.get("updated_at", ""),
+            "seen": sanitized_seen,
+        }
     return data
 
 
