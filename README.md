@@ -164,7 +164,14 @@ pip install -r requirements-dev.txt
 python -m pytest tests -v
 ```
 
-Current suite: **84 passing tests** across wallet validation, zero-balance handling, feed discovery, dedup across two runs, state persistence, Telegram message building, config, reports, and the workflow file structure.
+Current suite: **94 passing tests** across wallet validation, zero-balance handling, feed discovery, dedup across two runs, state persistence, Telegram message building, config, reports, the address-checker CLI, and the workflow file structure.
+
+Validate a Solana address at any time:
+
+```bash
+python scripts/check_address.py <address>
+python scripts/check_address.py --env PHANTOM_PUBLIC_ADDRESS
+```
 
 A local run writes `latest_report.json`, `latest_report.md`, and `dedup_state.json` into the working directory. All three are gitignored; they are upload artifacts, not source.
 
@@ -195,6 +202,32 @@ No new secrets are needed for V1.2. Confirm these exist under **Settings → Sec
 | Secret | `TELEGRAM_CHAT_ID` | No | Same as above. |
 
 No new permissions or workflow settings need enabling. If the repository previously had `AIRDROP_RSS_FEEDS` set to `[]` or to the old empty behaviour, clear it so the verified defaults apply.
+
+### Action required: `PHANTOM_PUBLIC_ADDRESS` is currently invalid
+
+As configured at the time of this release, the repository variable holds a value that is **not** a valid Solana address. It contains uppercase `I` and lowercase `l`, neither of which exists in the Base58 alphabet, so it can never be a public key:
+
+```
+INVALID  4GEkhEsX2ut3ymVm2lIXVhv2ZhwMlP9kpCeZqBtVUTBA
+         reason: contains characters outside the Base58 alphabet: 'I' 'l'
+```
+
+Until this is replaced, the report and Telegram message will show:
+
+```
+Saldo SOL: tidak tersedia
+```
+
+with the diagnostic `Invalid Solana address format`. That is the wallet refusing a malformed address, not an RPC failure.
+
+Copy the address straight from Phantom (**Receive → your account address**) and validate it before saving:
+
+```bash
+python scripts/check_address.py 4GEkhEsX2ut3ymVm2lIXVhv2ZhwMlP9kpCeZqBtVUTBA
+python scripts/check_address.py --env PHANTOM_PUBLIC_ADDRESS
+```
+
+The script exits `0` for a valid address and prints the exact reason otherwise. A valid address decodes to exactly 32 bytes, e.g. `7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU`.
 
 ## Security
 
