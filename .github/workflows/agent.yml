@@ -19,7 +19,11 @@ jobs:
           python-version: '3.12'
           cache: pip
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Run tests
+        run: python -m pytest tests -v
       - name: Download previous dedup state
         id: dedup_in
         continue-on-error: true
@@ -29,7 +33,6 @@ jobs:
           path: ./
       - name: Run agent
         id: run
-        continue-on-error: true
         run: python src/main.py
         env:
           AIRDROP_RSS_FEEDS: ${{ vars.AIRDROP_RSS_FEEDS }}
