@@ -140,3 +140,66 @@ class TestTriggerAndSafety:
         for step in steps:
             run = str(step.get("run", ""))
             assert "TELEGRAM_BOT_TOKEN" not in run or "echo" not in run
+
+
+class TestV13SourceVerification:
+    """The V1.3 source check must be visible without stopping the scan."""
+
+    def test_verify_sources_step_exists(self, steps):
+        step = _find(steps, "Verify sources")
+        assert "verify_sources.py" in str(step.get("run", ""))
+
+    def test_verify_sources_is_non_fatal(self, steps):
+        step = _find(steps, "Verify sources")
+        assert str(step.get("continue-on-error")).lower() == "true"
+        assert step.get("id") == "verify"
+
+    def test_verification_happens_before_the_agent(self, steps):
+        assert _index(steps, "Verify sources") < _index(steps, "Run agent")
+
+    def test_source_health_artifact_is_uploaded_even_on_failure(self, steps):
+        step = _find(steps, "Upload source health")
+        assert step.get("if") == "always()"
+        assert step["with"]["name"] == "source_health"
+        assert "source_health.json" in str(step["with"]["path"])
+
+    def test_state_source_is_passed_into_the_agent(self, steps):
+        env = _find(steps, "Run agent").get("env") or {}
+        assert "LUMAVUN_STATE_SOURCE" in env
+        assert "dedup_in.outputs.state_source" in str(env["LUMAVUN_STATE_SOURCE"])
+
+    def test_summary_reports_dedup_source_and_outcomes(self, steps):
+        step = _find(steps, "Summarize run")
+        run = str(step.get("run", ""))
+        assert step.get("if") == "always()"
+        assert "Dedup state source" in run
+        assert "latest_report.json" in run
+        assert "opportunity_summary" in run
+        assert "zero_capital_summary" in run
+
+    def test_workflow_name_reports_the_current_version(self, workflow):
+        assert "V1.3" in str(workflow["name"])
+
+    def test_git_hub_variables_still_flow_to_the_agent(self, steps):
+        env = _find(steps, "Run agent").get("env") or {}
+        for name in (
+            "AIRDROP_RSS_FEEDS",
+            "PHANTOM_PUBLIC_ADDRESS",
+            "SOLANA_RPC_URL",
+            "SOLANA_RPC_FALLBACK_URLS",
+        ):
+            assert name in env
+
+    def test_schedule_and_dispatch_are_preserved(self, workflow):
+        on = workflow.get("on", workflow.get(True))
+        assert "workflow_dispatch" in on
+        assert on["schedule"][0]["cron"] == "17 1,13 * * *"
+
+    def test_run_tests_still_blocks_the_agent(self, steps):
+        """A failing test suite must fail the workflow before scanning."""
+        tests = _find(steps, "Run tests")
+        agent = _find(steps, "Run agent")
+        assert tests.get("continue-on-error") not in (True, "true")
+        assert tests.get("if") in (None, "success")
+        assert agent.get("if") in (None, "success")
+        assert _index(steps, "Run tests") < _index(steps, "Verify sources")

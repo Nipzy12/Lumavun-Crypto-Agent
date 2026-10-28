@@ -1,10 +1,20 @@
 """
-LUMAVUN Crypto Agent V1.1 — entrypoint.
+LUMAVUN Crypto Agent V1.3 - entrypoint.
 
-This orchestrator composes the discovery engine, risk scanner, Phantom
-wallet monitor, Telegram reporter, persistent state, and report writers.
-It is designed to degrade gracefully: if one integration such as Telegram
-fails, the agent still writes its reports and finishes.
+The orchestrator composes the source layer, the analysis engine, the
+Phantom wallet monitor, Telegram reporting, persistent state and the report
+writers.
+
+Design rules that are enforced here:
+
+* One failing integration does not stop the run. Telegram errors, dead
+  sources and RPC failures are reported, not raised.
+* A campaign is notified once. Notification history lives in the persisted
+  state, which is restored from the previous workflow run.
+* Nothing is signed, claimed, deposited or traded. Every report says so.
+* An unhandled error is *not* caught here: it propagates, the process exits
+  non-zero, and GitHub Actions fails. Silent success is the failure mode we
+  refuse.
 """
 
 from __future__ import annotations
@@ -13,26 +23,26 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
+from config_loader import effective_sources, load_config
 from discovery import (
     Campaign,
-    SourceHealth,
     deduplicate_campaigns,
-    scan_feeds,
+    scan_sources,
 )
-from config_loader import effective_feeds, load_config
 from reporter import build_report, write_json_report, write_markdown_report
-from risk import classify, summarize_classification
-from state import load_state_from_artifact, save_state_locally
-from telegram import (
-    build_report_message,
-    notify,
-    should_notify_campaign,
+from state import (
+    load_state_from_artifact,
+    mark_run,
+    record_notification,
+    save_state_locally,
+    was_notified,
 )
+from telegram import build_messages, send_messages
 from wallet import read_wallet
 
-# Reports contain Indonesian text and status emoji. Force UTF-8 so a
+# Reports contain Indonesian text and status symbols. Force UTF-8 so a
 # non-UTF-8 console (for example a Windows cp1252 shell) cannot crash the run.
 for _stream in (sys.stdout, sys.stderr):
     try:
@@ -46,7 +56,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-REQUEST_TIMEOUT = int(os.getenv("LUMAVUN_REQUEST_TIMEOUT", "20"))
+AGENT_VERSION = "1.3"
 
 
 def _env_list(name: str) -> List[str]:
@@ -56,80 +66,140 @@ def _env_list(name: str) -> List[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def campaign_payload(campaign: Campaign) -> Dict[str, Any]:
+    """The subset of a campaign that notifications need."""
+    return {
+        "campaign_id": campaign.campaign_id,
+        "title": campaign.title,
+        "project": campaign.project,
+        "url": campaign.url,
+        "source": campaign.source,
+        "announcement_url": campaign.announcement_url,
+        "official_url": campaign.official_url,
+        "opportunity_type": campaign.opportunity_type,
+        "opportunity_reason": campaign.opportunity_reason,
+        "deadline": campaign.deadline,
+        "deadline_text": campaign.deadline_text,
+        "tasks": list(campaign.tasks),
+        "reward_status": campaign.reward_status,
+        "reward_text": campaign.reward_text,
+        "reward_note": campaign.reward_note,
+        "zero_capital_ok": campaign.zero_capital_ok,
+        "zero_capital_reason": campaign.zero_capital_reason,
+        "risk_flags": list(campaign.risk_flags),
+        "risk_score": campaign.risk_score,
+        "risk_band": campaign.risk_band,
+        "risk_explanation": list(campaign.risk_explanation),
+        "classification": campaign.classification,
+        "cross_checked": campaign.cross_checked,
+        "cross_check_note": campaign.cross_check_note,
+    }
+
+
 def main() -> int:
-    logger.info("LUMAVUN Crypto Agent V1.2 starting")
+    logger.info("LUMAVUN Crypto Agent V%s starting", AGENT_VERSION)
     scan_time = datetime.now(timezone.utc).isoformat()
     config = load_config()
 
-    feeds = effective_feeds()
-    logger.info("Feeds to scan: %d", len(feeds))
-
-    campaigns, source_health, errors = scan_feeds(
-        feeds, config=config
+    specs = effective_sources()
+    logger.info(
+        "Sources configured: %d (%s)",
+        len(specs),
+        ", ".join(sorted({spec.category for spec in specs})) or "none",
     )
+    if not specs:
+        logger.warning(
+            "No sources configured. Set AIRDROP_RSS_FEEDS or enable sources in "
+            "config/vetted_sources.yaml."
+        )
 
-    # Risk classification and dedup are computed after scanning.
-    for campaign in campaigns:
-        classify(campaign, config)
+    campaigns, source_health, errors = scan_sources(specs, config=config)
+    logger.info(
+        "Scan finished: %d campaigns from %d sources (%d errors)",
+        len(campaigns),
+        len(source_health),
+        len(errors),
+    )
 
     state = load_state_from_artifact()
-    campaigns, state, duplicates_skipped = deduplicate_campaigns(
+    state_source = os.getenv("LUMAVUN_STATE_SOURCE", "").strip() or "local"
+    total_found = len(campaigns)
+
+    new_campaigns, state, duplicates_skipped = deduplicate_campaigns(
         campaigns,
         state,
-        max_entries=config.get("dedup", {}).get("max_entries", 200),
-        stale_days=config.get("dedup", {}).get("stale_days", 7),
+        max_entries=int(config.get("dedup", {}).get("max_entries", 200)),
+        stale_days=int(config.get("dedup", {}).get("stale_days", 7)),
     )
-    save_state_locally(state)
+
+    # Only notify what is new AND has never been sent. State survives runs.
+    to_notify = [
+        campaign
+        for campaign in new_campaigns
+        if not was_notified(state, campaign.campaign_id)
+    ]
+    logger.info(
+        "Dedup: %d new, %d duplicates skipped, %d to notify",
+        len(new_campaigns),
+        len(duplicates_skipped),
+        len(to_notify),
+    )
 
     wallet = read_wallet(
         os.getenv("PHANTOM_PUBLIC_ADDRESS", "").strip(),
-        os.getenv("SOLANA_RPC_URL", "").strip() or (
-            config.get("rpc", {}).get("default_url", "") or ""
-        ),
+        os.getenv("SOLANA_RPC_URL", "").strip()
+        or (config.get("rpc", {}).get("default_url", "") or ""),
         _env_list("SOLANA_RPC_FALLBACK_URLS"),
     )
-
-    # Only notify campaigns that are new relative to the previous run.
-    previous_seen_keys = set(state.get("seen", {}).keys())
-    notified_hashes: List[str] = []
-    campaigns_to_notify: List[Dict[str, Any]] = []
-    for campaign in campaigns:
-        payload = {
-            "title": campaign.title,
-            "url": campaign.url,
-            "source": campaign.source,
-            "risk_flags": campaign.risk_flags,
-            "classification": campaign.classification,
-            "is_confirmed": campaign.is_confirmed,
-            "is_speculation": campaign.is_speculation,
-        }
-        if should_notify_campaign(payload, notified_hashes):
-            campaigns_to_notify.append(payload)
-            notified_hashes.append(
-                hashlib_helper(payload)
+    if wallet.get("address_valid") is False:
+        logger.warning("Wallet: %s", wallet.get("diagnostics"))
+        if os.getenv("PHANTOM_PUBLIC_ADDRESS", "").strip():
+            # A configured but unusable address is a configuration error
+            # worth surfacing loudly in the log and the report.
+            logger.error(
+                "PHANTOM_PUBLIC_ADDRESS is set but is not a valid Solana public "
+                "key (Base58, 32 bytes). SOL balance cannot be read."
             )
 
-    message = build_report_message(
+    payloads = [campaign_payload(campaign) for campaign in to_notify]
+    messages = build_messages(
         scan_time=scan_time,
         wallet_summary=wallet,
-        campaigns=campaigns_to_notify,
+        campaigns=payloads,
         source_health=source_health,
         errors=errors,
+        total_found=total_found,
+        duplicates_skipped=len(duplicates_skipped),
     )
 
     telegram_result: Optional[Dict[str, Any]] = None
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     if bot_token and chat_id:
-        telegram_result = notify(bot_token, chat_id, message)
+        telegram_result = send_messages(bot_token, chat_id, messages)
         if not telegram_result.get("sent"):
             logger.warning(
-                "Telegram notification did not send: %s",
-                telegram_result.get("error"),
+                "Telegram delivery incomplete: %s", telegram_result.get("error")
             )
     else:
-        logger.info("Telegram not configured; printing report summary only")
-        print(message)
+        logger.info("Telegram not configured; printing the summary only")
+        print(messages[0] if messages else "No summary generated")
+        telegram_result = None
+
+    # Record notification history only when delivery actually happened, so a
+    # failed send is retried on the next run instead of being lost.
+    delivered = telegram_result is None or bool(telegram_result.get("sent"))
+    if delivered:
+        for campaign in to_notify:
+            record_notification(
+                state,
+                campaign.campaign_id,
+                opportunity_type=campaign.opportunity_type,
+                title=campaign.title[:80],
+            )
+
+    mark_run(state)
+    save_state_locally(state)
 
     report = build_report(
         scan_time=scan_time,
@@ -139,36 +209,27 @@ def main() -> int:
         errors=errors,
         telegram_result=telegram_result,
         duplicates_skipped=len(duplicates_skipped),
+        total_found=total_found,
+        state_source=state_source,
     )
-
     json_path = write_json_report(report)
     md_path = write_markdown_report(report)
 
     logger.info(
-        "Report written: %s, %s | campaigns=%d errors=%d telegram_sent=%s",
+        "Report written: %s, %s | campaigns=%d new=%d duplicates=%d errors=%d telegram=%s",
         json_path,
         md_path,
         len(campaigns),
+        len(new_campaigns),
+        len(duplicates_skipped),
         len(errors),
-        telegram_result.get("sent") if telegram_result else None,
+        (telegram_result or {}).get("sent"),
     )
     for err in errors:
         print(f"WARN: {err}")
     if wallet.get("diagnostics"):
         print(f"WARN: wallet: {wallet['diagnostics']}")
     return 0
-
-
-def hashlib_helper(payload: Dict[str, Any]) -> str:
-    """Small helper to avoid a top-level import of hashlib in main."""
-    import hashlib
-
-    parts = [
-        str(payload.get("title", "")).strip().lower(),
-        str(payload.get("source", "")).strip().lower(),
-        str(payload.get("url", "")).strip().lower(),
-    ]
-    return hashlib.sha256("\x00".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
 if __name__ == "__main__":

@@ -38,7 +38,8 @@ class TestStateRoundTrip:
     def test_first_run_has_no_prior_state(self, run_dir):
         state = load_state_from_artifact()
         assert state["seen"] == {}
-        assert state["version"] == "1.2"
+        assert state["version"] == "1.3"
+        assert state["notifications"] == {}
 
     def test_saved_state_is_reloaded_by_the_next_run(self, run_dir):
         state = default_state()

@@ -11,3 +11,6 @@ build/
 latest_report.json
 latest_report.md
 dedup_state.json
+dedup_state.corrupt.json
+dedup_state.lock
+source_health.json

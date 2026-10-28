@@ -1,4 +1,4 @@
-name: LUMAVUN Crypto Agent V1.2
+name: LUMAVUN Crypto Agent V1.3
 on:
   workflow_dispatch:
   schedule:
@@ -31,6 +31,16 @@ jobs:
 
       - name: Run tests
         run: python -m pytest tests -v
+
+      # Independent check of every configured endpoint, using the same
+      # registry and robots/rate-limit policy as the agent. It is allowed to
+      # fail without stopping the scan, but its result is reported in the
+      # step summary and uploaded as an artifact, so a dead source is never
+      # silently invisible.
+      - name: Verify sources
+        id: verify
+        continue-on-error: true
+        run: python scripts/verify_sources.py
 
       # The dedup state must come from a PREVIOUS run. actions/download-artifact
       # defaults to the current run, which has no state yet, so this uses the
@@ -78,6 +88,7 @@ jobs:
         id: run
         run: python src/main.py
         env:
+          LUMAVUN_STATE_SOURCE: ${{ steps.dedup_in.outputs.state_source }}
           AIRDROP_RSS_FEEDS: ${{ vars.AIRDROP_RSS_FEEDS }}
           PHANTOM_PUBLIC_ADDRESS: ${{ vars.PHANTOM_PUBLIC_ADDRESS }}
           SOLANA_RPC_URL: ${{ vars.SOLANA_RPC_URL }}
@@ -109,17 +120,84 @@ jobs:
           if-no-files-found: warn
           overwrite: true
 
+      - name: Upload source health
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source_health
+          path: source_health.json
+          retention-days: 7
+          if-no-files-found: warn
+          overwrite: true
+
       - name: Summarize run
         if: always()
         env:
           STATE_SOURCE: ${{ steps.dedup_in.outputs.state_source }}
           RUN_OUTCOME: ${{ steps.run.outcome }}
+          SOURCES_OUTCOME: ${{ steps.verify.outcome }}
         run: |
-          {
-            echo "## LUMAVUN Crypto Agent V1.2"
-            echo ""
-            echo "- Dedup state source: \`${STATE_SOURCE:-unknown}\`"
-            echo "- Agent step outcome: \`${RUN_OUTCOME:-skipped}\`"
-            echo "- Reports artifact: \`latest_report\`"
-            echo "- Dedup artifact: \`dedup_state\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          lines = ["## LUMAVUN Crypto Agent V1.3", ""]
+          lines.append(f"- Dedup state source: `{os.environ.get('STATE_SOURCE') or 'unknown'}`")
+          lines.append(f"- Agent step outcome: `{os.environ.get('RUN_OUTCOME') or 'skipped'}`")
+          lines.append(f"- Source verification: `{os.environ.get('SOURCES_OUTCOME') or 'skipped'}`")
+
+          report_path = pathlib.Path("latest_report.json")
+          if report_path.exists():
+              try:
+                  report = json.loads(report_path.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  lines.append(f"- Report could not be parsed: `{type(exc).__name__}`")
+              else:
+                  source_summary = report.get("source_summary", {})
+                  lines.append(
+                      f"- Sources reachable: `{source_summary.get('reachable', 0)}/"
+                      f"{source_summary.get('total', 0)}`"
+                  )
+                  lines.append(
+                      f"- Campaigns: `{report.get('total_found', 0)}` total, "
+                      f"`{report.get('campaign_count', 0)}` reported, "
+                      f"`{report.get('duplicates_skipped', 0)}` duplicates skipped"
+                  )
+                  types = report.get("opportunity_summary", {})
+                  if types:
+                      rendered = " | ".join(
+                          f"{name} {count}" for name, count in types.items() if count
+                      )
+                      lines.append(f"- Opportunity types: {rendered or 'none'}")
+                  zero = report.get("zero_capital_summary", {})
+                  lines.append(
+                      f"- Zero-capital: `{zero.get('passes', 0)}` pass, "
+                      f"`{zero.get('blocked', 0)}` blocked, `{zero.get('unknown', 0)}` unknown"
+                  )
+                  wallet = report.get("wallet", {})
+                  sol = wallet.get("sol_balance")
+                  lines.append(
+                      "- Wallet SOL: "
+                      + ("unavailable" if sol is None else f"{sol:,.6f} SOL")
+                  )
+                  telegram = report.get("telegram")
+                  if telegram:
+                      lines.append(
+                          f"- Telegram: `{telegram.get('sent_count')}/"
+                          f"{telegram.get('messages')}` messages sent"
+                      )
+          else:
+              lines.append("- Report file: not produced")
+
+          lines.append("- Reports artifact: `latest_report`")
+          lines.append("- Dedup artifact: `dedup_state`")
+          lines.append("- Source health artifact: `source_health`")
+
+          if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as handle:
+                  handle.write("\n".join(lines) + "\n")
+          else:
+              print("\n".join(lines))
+          PY

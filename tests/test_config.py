@@ -84,4 +84,54 @@ class TestVerifiedSourcesConfig:
 
         info = known_sources()
         assert info["default_feeds"] == VERIFIED_FEEDS
-        assert info["version"] == "1.2"
+        assert info["version"] == "1.3"
+
+    def test_registry_exposes_modular_sources(self):
+        """V1.3: the registry must describe rss/json sources, not just feeds."""
+        from config_loader import known_sources
+
+        info = known_sources()
+        sources = info["sources"]
+        assert len(sources) >= 3
+        kinds = {entry["kind"] for entry in sources}
+        assert "rss" in kinds
+        assert "json" in kinds, "V1.3 requires public API (JSON) source support"
+        categories = {entry["category"] for entry in sources}
+        assert "official_project" in categories
+        for entry in sources:
+            assert entry["url"].startswith("https://")
+            assert entry["enabled"] is True
+
+    def test_every_enabled_source_has_a_verification_record(self):
+        from config_loader import known_sources
+
+        info = known_sources()
+        verified = {entry["url"] for entry in info["verified_sources"]}
+        for entry in info["sources"]:
+            if entry.get("enabled"):
+                assert entry["url"] in verified, entry["url"]
+
+    def test_source_policy_is_documented(self):
+        from config_loader import known_sources
+
+        policy = known_sources()["source_policy"]
+        assert policy["respect_robots"] is True
+        assert policy["min_interval_seconds"] > 0
+        assert policy["request_timeout_seconds"] > 0
+        assert policy["max_entries_per_source"] > 0
+        assert policy["max_findings"] > 0
+
+    def test_rejected_sources_never_reappear_in_registry(self):
+        from config_loader import known_sources
+
+        info = known_sources()
+        rejected = {entry["url"] for entry in info["rejected_sources"]}
+        assert rejected, "the rejection record must not be empty"
+        for entry in info["sources"]:
+            assert entry["url"] not in rejected, entry["url"]
+
+    def test_rejected_records_carry_observed_reasons(self):
+        from config_loader import known_sources
+
+        for entry in known_sources()["rejected_sources"]:
+            assert entry.get("reason"), entry["url"]

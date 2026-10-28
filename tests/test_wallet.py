@@ -6,6 +6,7 @@ from wallet import (
     validate_solana_address,
     read_wallet,
     get_sol_balance,
+    get_token_accounts,
     check_rpc_health,
 )
 
@@ -203,3 +204,170 @@ class TestReadWallet:
 
         assert wallet["used_rpc"] == "https://fallback.example"
         assert wallet["sol_balance"] == pytest.approx(0.0)
+
+
+class TestSplTokenStatus:
+    """V1.3: an empty token list and a failed token query are different.
+
+    Reporting "0 tokens" when the RPC actually failed is the mistake this
+    class exists to prevent.
+    """
+
+    @staticmethod
+    def _sequence(m, url, balance, token_payload):
+        m.post(
+            url,
+            [
+                {"json": {"jsonrpc": "2.0", "result": {"epoch": "3"}, "id": 1}, "status_code": 200},
+                {"json": {"jsonrpc": "2.0", "result": {"value": balance}, "id": 1}, "status_code": 200},
+                {"json": token_payload, "status_code": 200},
+            ],
+        )
+
+    @staticmethod
+    def _token(mint, amount, decimals, ui_amount=None):
+        info = {"mint": mint, "tokenAmount": {"amount": amount, "decimals": decimals}}
+        if ui_amount is not None:
+            info["tokenAmount"]["uiAmount"] = ui_amount
+        return {
+            "jsonrpc": "2.0",
+            "result": {
+                "value": [
+                    {
+                        "pubkey": "5abc",
+                        "account": {
+                            "data": {"parsed": {"info": info, "program": "spl-token"}, "space": 165},
+                        },
+                    }
+                ]
+            },
+            "id": 1,
+        }
+
+    def test_empty_wallet_is_zero_not_unavailable(self):
+        with requests_mock.Mocker() as m:
+            self._sequence(
+                m,
+                "https://rpc.example.com",
+                0,
+                {"jsonrpc": "2.0", "result": {"value": []}, "id": 1},
+            )
+            wallet = read_wallet(VALID_PHANTOM_ADDRESS, "https://rpc.example.com", [])
+        assert wallet["spl_query_ok"] is True
+        assert wallet["spl_status"] == "ok"
+        assert wallet["spl_token_count"] == 0
+        assert wallet["sol_balance"] == pytest.approx(0.0)
+        assert "kosong" in wallet["spl_note"]
+
+    def test_failed_spl_query_is_not_reported_as_an_empty_wallet(self):
+        with requests_mock.Mocker() as m:
+            m.post(
+                "https://rpc.example.com",
+                [
+                    {"json": {"jsonrpc": "2.0", "result": {"epoch": "3"}, "id": 1}, "status_code": 200},
+                    {"json": {"jsonrpc": "2.0", "result": {"value": 1000000000}, "id": 1}, "status_code": 200},
+                    {
+                        "json": {
+                            "jsonrpc": "2.0",
+                            "error": {"code": -32005, "message": "rate limited"},
+                            "id": 1,
+                        },
+                        "status_code": 200,
+                    },
+                ],
+            )
+            wallet = read_wallet(VALID_PHANTOM_ADDRESS, "https://rpc.example.com", [])
+
+        # SOL still read successfully ...
+        assert wallet["sol_balance"] == pytest.approx(1.0)
+        # ... but the token section must say "unavailable", not "0".
+        assert wallet["spl_query_ok"] is False
+        assert wallet["spl_status"] == "unavailable"
+        assert wallet["spl_token_count"] is None
+        assert "SPL read failed" in wallet["diagnostics"]
+
+    def test_token_ui_amount_is_derived_when_missing(self):
+        payload = self._token("So11111111111111111111111111111111111111112", "1500000000", 9)
+        with requests_mock.Mocker() as m:
+            self._sequence(m, "https://rpc.example.com", 1, payload)
+            wallet = read_wallet(VALID_PHANTOM_ADDRESS, "https://rpc.example.com", [])
+
+        assert wallet["spl_token_count"] == 1
+        token = wallet["spl_tokens"][0]
+        assert token["mint"] == "So11111111111111111111111111111111111111112"
+        assert token["decimals"] == 9
+        assert token["ui_amount"] == pytest.approx(1.5)
+        assert wallet["spl_nonzero_count"] == 1
+
+    def test_legacy_token_info_shape_is_understood(self):
+        payload = {
+            "jsonrpc": "2.0",
+            "result": {
+                "value": [
+                    {
+                        "account": {
+                            "data": {
+                                "token_info": {
+                                    "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                                    "raw_balance": 2500000,
+                                    "decimals": 6,
+                                }
+                            }
+                        }
+                    }
+                ]
+            },
+            "id": 1,
+        }
+        with requests_mock.Mocker() as m:
+            self._sequence(m, "https://rpc.example.com", 1, payload)
+            wallet = read_wallet(VALID_PHANTOM_ADDRESS, "https://rpc.example.com", [])
+
+        assert wallet["spl_token_count"] == 1
+        assert wallet["spl_tokens"][0]["ui_amount"] == pytest.approx(2.5)
+
+    def test_query_token_accounts_distinguishes_empty_from_failed(self):
+        from wallet import query_token_accounts
+
+        with requests_mock.Mocker() as m:
+            m.post(
+                "https://rpc.example.com",
+                json={"jsonrpc": "2.0", "result": {"value": []}, "id": 1},
+                status_code=200,
+            )
+            tokens, error = query_token_accounts(
+                VALID_PHANTOM_ADDRESS, "https://rpc.example.com"
+            )
+        assert tokens == []
+        assert error is None
+
+        with requests_mock.Mocker() as m:
+            m.post(
+                "https://rpc.example.com",
+                json={
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32005, "message": "rate limited"},
+                    "id": 1,
+                },
+                status_code=200,
+            )
+            tokens, error = query_token_accounts(
+                VALID_PHANTOM_ADDRESS, "https://rpc.example.com"
+            )
+        assert tokens is None
+        assert "rate limited" in error
+
+    def test_get_token_accounts_still_returns_a_list(self):
+        """Backward compatibility: the old helper never raises."""
+        with requests_mock.Mocker() as m:
+            m.post(
+                "https://rpc.example.com",
+                json={
+                    "jsonrpc": "2.0",
+                    "error": {"code": -32005, "message": "rate limited"},
+                    "id": 1,
+                },
+                status_code=200,
+            )
+            tokens = get_token_accounts(VALID_PHANTOM_ADDRESS, "https://rpc.example.com")
+        assert tokens == []

@@ -1,29 +1,132 @@
-# LUMAVUN Crypto Agent V1.2 — vetted sources configuration
+# LUMAVUN Crypto Agent V1.3 — vetted sources configuration
 #
-# This file documents the sources, keywords, and risk rules the agent uses.
-# It is a reference for operators and a fallback reference when
-# AIRDROP_RSS_FEEDS is not set. The agent still honors AIRDROP_RSS_FEEDS
-# from GitHub Variables when that variable is present.
+# This file is the source registry and rule reference for the agent.
+# Every enabled source below was requested over HTTPS during V1.3
+# development and returned HTTP 200 with a parseable body. Nothing here is
+# guessed, and nothing is invented: the agent only ever reports campaigns
+# that appear in the payloads it actually received.
 #
-# Do not add feeds you are not allowed to access or that violate terms.
-# This file does not grant permission to scrape any site.
-# Sources here were HTTP-verified during V1.2 development; verify them
-# periodically because feed availability and content can change.
+# Compliance notes:
+#   * Only public, read-only feeds and documented public APIs are used.
+#   * robots.txt is fetched and honored before any source request
+#     (source_policy.respect_robots).
+#   * Requests are rate-limited per host (source_policy.min_interval_seconds)
+#     and carry an identifying User-Agent.
+#   * No HTML scraping, no login, no account automation, no CAPTCHA bypass.
+#   * API keys are never required by the sources configured here.
 
-version: "1.2"
+version: "1.3"
 
-# Default RSS/Atom feeds used only when AIRDROP_RSS_FEEDS is empty.
-# These are publicly reachable HTTPS feeds that were HTTP-verified during
-# V1.2. They are listed as documentation; the agent does not invent
-# campaigns or rewards and honors AIRDROP_RSS_FEEDS from Variables first.
+# Backward-compatible feed list. These are the three feeds carried since
+# V1.1/V1.2 and they are preserved for compatibility (and used when
+# AIRDROP_RSS_FEEDS is not set). The full v1.3 registry is `sources` below,
+# where each entry declares its transport (`kind`) and role (`category`).
 default_feeds:
   - https://airdropalert.com/feed/rssfeed
   - https://airdrops.io/feed/
   - https://decrypt.co/feed
 
-# Verification record for the feeds above. Every URL below was requested
-# over HTTPS with a normal GET during V1.2 development and returned 200
-# with a parseable RSS/Atom body. Nothing here is guessed.
+# ---------------------------------------------------------------------------
+# Source registry (V1.3). Each entry is one place the agent may read.
+#
+#   kind: rss  -> RSS/Atom feed parsed with feedparser
+#   kind: json -> documented public JSON API
+#   parser:     which adapter turns the payload into campaign candidates
+#   category:
+#     airdrop_listing -> third-party listing of campaigns
+#     official_project -> first-party project announcement channel
+#     news -> general crypto newsroom
+# ---------------------------------------------------------------------------
+sources:
+  - id: airdropalert-rss
+    label: "AirdropAlert — campaign listing feed (RSS)"
+    url: "https://airdropalert.com/feed/rssfeed"
+    kind: rss
+    parser: feed
+    category: airdrop_listing
+    official: false
+    enabled: true
+    notes: >
+      Dedicated campaign feed. Entries also carry non-standard fields
+      (airdrop_link, website_link, white_paper_link, post-id) which the
+      agent reads when present. Referral and tracking parameters are
+      stripped from every link before it is used or reported.
+
+  - id: airdrops-io-rss
+    label: "airdrops.io — guides, points and testnet write-ups (RSS)"
+    url: "https://airdrops.io/feed/"
+    kind: rss
+    parser: feed
+    category: airdrop_listing
+    official: false
+    enabled: true
+    notes: >
+      Publishes less often than a listings feed, so a quiet period here is
+      normal. Long-form entry bodies are used for task and reward extraction.
+
+  - id: airdropalert-api
+    label: "AirdropAlert — public WordPress REST API (JSON)"
+    url: "https://airdropalert.com/wp-json/wp/v2/posts?per_page=10&_fields=id,date_gmt,link,title,excerpt"
+    kind: json
+    parser: wp_rest_posts
+    category: airdrop_listing
+    official: false
+    enabled: true
+    notes: >
+      Same publisher as airdropalert-rss, read through its own public REST
+      API instead of a feed. This is the JSON transport path: the adapter
+      maps documented fields (id, date_gmt, link, title.rendered,
+      excerpt.rendered). It is a mixed blog feed, so most entries are
+      filtered out by the campaign keyword rules — that is expected, not a
+      failure.
+
+  - id: decrypt-rss
+    label: "Decrypt — crypto newsroom (RSS)"
+    url: "https://decrypt.co/feed"
+    kind: rss
+    parser: feed
+    category: news
+    official: false
+    enabled: true
+    notes: >
+      General newsroom coverage, not airdrop-dedicated. It surfaces token
+      generation events and testnet launches but also carries unrelated
+      market news, so most entries will not match campaign keywords. Kept
+      because it has been part of the agent since V1.1.
+
+  - id: ethereum-blog-rss
+    label: "Ethereum Foundation blog — official announcements (RSS)"
+    url: "https://blog.ethereum.org/feed.xml"
+    kind: rss
+    parser: feed
+    category: official_project
+    official: true
+    enabled: true
+    notes: >
+      First-party announcement channel. At verification time it published
+      testnet upgrade announcements, which is exactly the class of
+      opportunity this agent looks for. Entries are never treated as
+      reward promises.
+
+  - id: arbitrum-blog-rss
+    label: "Arbitrum blog — official announcements (RSS)"
+    url: "https://blog.arbitrum.io/feed"
+    kind: rss
+    parser: feed
+    category: official_project
+    official: true
+    enabled: true
+    notes: >
+      First-party announcement channel. Publishes incentive-programme
+      announcements rarely (1 of the newest 15 entries matched campaign
+      keywords at verification time), so expect long quiet periods.
+
+# ---------------------------------------------------------------------------
+# Verification record. Every entry here was requested over HTTPS with a
+# normal GET during V1.3 development. `entries_at_check`, `newest_entry`
+# and `keyword_hits_at_check` are the measurements from that check, not
+# estimates.
+# ---------------------------------------------------------------------------
 verified_sources:
   - url: https://airdropalert.com/feed/rssfeed
     http_status: 200
@@ -31,6 +134,7 @@ verified_sources:
     feed_format: RSS 2.0
     entries_at_check: 100
     newest_entry: "Tue, 27 Oct 2026 19:15:52 +0000"
+    keyword_hits_at_check: "15/15 newest entries matched campaign keywords"
     focus: "Dedicated airdrop campaign listings, including quest and task steps"
     notes: >
       Third-party listing. Entries are campaign claims, not first-party
@@ -42,10 +146,24 @@ verified_sources:
     feed_format: RSS 2.0
     entries_at_check: 10
     newest_entry: "Fri, 02 Oct 2026 16:59:32 +0000"
+    keyword_hits_at_check: "10/10 newest entries matched campaign keywords"
     focus: "Airdrop guides, points programs, and testnet farming write-ups"
     notes: >
       Editorial/guide feed. Publishes less often than the listings feed,
       so a quiet period here is normal.
+
+  - url: https://airdropalert.com/wp-json/wp/v2/posts?per_page=10&_fields=id,date_gmt,link,title,excerpt
+    http_status: 200
+    content_type: application/json
+    feed_format: "WordPress REST API (JSON array of post objects)"
+    entries_at_check: 10
+    newest_entry: "2026-10-28T12:37:35"
+    keyword_hits_at_check: "mixed blog feed; keyword filtering drops most entries"
+    focus: "Structured JSON transport for the airdropalert.com publisher"
+    notes: >
+      robots.txt for airdropalert.com disallows nothing (User-agent: *
+      / Disallow: empty), so this public endpoint is permitted. Only
+      documented fields are read.
 
   - url: https://decrypt.co/feed
     http_status: 200
@@ -53,14 +171,38 @@ verified_sources:
     feed_format: RSS 2.0
     entries_at_check: 35
     newest_entry: "Wed, 28 Oct 2026 12:16:30 +0000"
+    keyword_hits_at_check: "1/15 newest entries matched campaign keywords"
     focus: "Crypto news coverage, including airdrop and testnet announcements"
     notes: >
-      General newsroom feed, not airdrop-dedicated. It surfaces token
-      generation events and testnet launches but also carries unrelated
-      market news, so most entries will not match campaign keywords.
+      General newsroom feed; kept for continuity from V1.1/V1.2.
 
-# Feeds that were tested and REJECTED. Kept so nobody re-adds them by
-# mistake or assumes they work.
+  - url: https://blog.ethereum.org/feed.xml
+    http_status: 200
+    content_type: application/xml
+    feed_format: RSS 2.0
+    entries_at_check: 644
+    newest_entry: "Thu, 22 Oct 2026 00:00:00 GMT"
+    keyword_hits_at_check: "6/15 newest entries matched campaign keywords"
+    focus: "Official Ethereum Foundation announcements, including testnets"
+    notes: >
+      First-party source. Used for corroborating third-party listing claims
+      and for testnet announcements.
+
+  - url: https://blog.arbitrum.io/feed
+    http_status: 200
+    content_type: application/rss+xml
+    feed_format: RSS 2.0
+    entries_at_check: 15
+    newest_entry: "Thu, 15 Oct 2026 13:43:20 GMT"
+    keyword_hits_at_check: "1/15 newest entries matched campaign keywords"
+    focus: "Official Arbitrum announcements, including incentive programmes"
+    notes: >
+      First-party source with a low publication rate for campaigns.
+
+# ---------------------------------------------------------------------------
+# Sources that were tested and REJECTED. Kept so nobody re-adds them by
+# mistake or assumes they work. Every reason below was observed directly.
+# ---------------------------------------------------------------------------
 rejected_sources:
   - url: https://coinmarketcap.com/headlines/rss/
     http_status: 404
@@ -79,14 +221,138 @@ rejected_sources:
   - url: https://airdrops.io/blog/feed/
     http_status: 410
     reason: "Legacy blog feed is gone (HTTP 410)."
+  - url: https://airdrops.io/news/feed/
+    http_status: 410
+    reason: "HTTP 410 even though the body is served as RSS."
+  - url: https://airdrops.io/wp-json/wp/v2/posts
+    http_status: 401
+    reason: "Publisher disabled its REST API (401)."
+  - url: https://decrypt.co/wp-json/wp/v2/posts
+    http_status: 404
+    reason: "No WordPress REST API at this path (404)."
+  - url: https://cryptoslate.com/feed/
+    http_status: 403
+    reason: "Blocks non-browser clients (403)."
+  - url: https://cryptorank.io/rss/news
+    http_status: 404
+    reason: "No feed at this path."
+  - url: https://cointelegraph.com/rss
+    http_status: 200
+    reason: "Live feed, but 0 of the newest 15 entries matched any campaign keyword."
+  - url: https://www.theblock.co/rss.xml
+    http_status: 200
+    reason: "Live feed, but 0 of the newest 15 entries matched campaign keywords."
+  - url: https://www.coindesk.com/arc/outboundfeeds/rss/
+    http_status: 200
+    reason: "Live feed, but 0 of the newest 15 entries matched campaign keywords."
+  - url: https://ambcrypto.com/feed/
+    http_status: 200
+    reason: "Live feed, but 0 of the newest 15 entries matched campaign keywords."
+  - url: https://cryptopotato.com/feed/
+    http_status: 200
+    reason: "Live feed, but 0 of the newest 15 entries matched campaign keywords."
+  - url: https://u.today/rss
+    http_status: 200
+    reason: "Live feed, but 0 of the newest 15 entries matched campaign keywords."
+  - url: https://coinjournal.net/feed/
+    http_status: 200
+    reason: "Live feed, but 0 of the newest 9 entries matched campaign keywords."
+  - url: https://dailyhodl.com/feed/
+    http_status: 200
+    reason: "Live feed, but 0 of the newest 15 entries matched campaign keywords."
+  - url: https://beincrypto.com/feed/
+    http_status: 200
+    reason: "Live feed, but only 2 of the newest 15 entries matched, both incidental."
+  - url: https://cryptobriefing.com/feed/
+    http_status: 200
+    reason: "Live feed, but only 1 of the newest 15 entries matched, incidentally."
+  - url: https://thedefiant.io/api/feed
+    http_status: 200
+    reason: "Live feed, but only 2 of the newest 15 entries matched, incidentally."
+  - url: https://www.newsbtc.com/feed/
+    http_status: 200
+    reason: "Live feed, but only 1 of the newest 10 entries matched, incidentally (a buyback notice)."
+  - url: https://solana.com/news/rss.xml
+    http_status: 200
+    reason: "Official and live, but 0 of the newest 15 entries matched campaign keywords."
+  - url: https://blog.sui.io/rss/
+    http_status: 200
+    reason: "Official and live, but 0 of the newest 15 entries matched campaign keywords."
+  - url: https://blog.celestia.org/feed/
+    http_status: 200
+    reason: "Official and live, but 0 of the newest 15 entries matched campaign keywords."
+  - url: https://github.com/solana-labs/solana/releases.atom
+    http_status: 200
+    reason: >
+      Valid Atom feed, but the newest release at check time was 2024-10-21.
+      Too stale to use as a live official announcement channel.
+  - url: https://blog.zksync.io/rss.xml
+    http_status: 200
+    reason: "HTTP 200 but the body contains no feed entries."
+  - url: https://scroll.io/blog/rss.xml
+    http_status: 200
+    reason: "HTTP 200 but the body contains no feed entries."
+  - url: https://www.starknet.io/blog/feed/
+    http_status: 200
+    reason: "HTTP 200 but the body contains no feed entries."
+  - url: https://blog.monad.xyz/rss.xml
+    http_status: 200
+    reason: "HTTP 200 but the body contains no feed entries."
+  - url: https://www.optimism.io/blog/rss.xml
+    http_status: 404
+    reason: "No feed at this path."
+  - url: https://blog.uniswap.org/rss.xml
+    http_status: 404
+    reason: "No feed at this path."
+  - url: https://www.base.org/rss.xml
+    http_status: 404
+    reason: "No feed at this path."
+  - url: https://blog.avax.network/rss.xml
+    http_status: null
+    reason: "Connection error at check time."
+  - url: https://api.llama.fi/airdrops
+    http_status: 404
+    reason: "No such public endpoint."
+  - url: https://api.llama.fi/emissionsList
+    http_status: 402
+    reason: "Paid-plan only (HTTP 402); not usable without a key."
+  - url: https://api.coingecko.com/api/v3/events
+    http_status: 404
+    reason: "No such public endpoint (CoinGecko returns an error object)."
+  - url: https://api.coinpaprika.com/v1/events
+    http_status: 404
+    reason: "No such public endpoint."
+  - url: https://api.coingecko.com/api/v3/search/trending
+    http_status: 200
+    reason: >
+      Real public JSON API, but it returns trending coins, not campaigns.
+      Not used, to avoid inventing airdrop signal that is not there.
 
-# Keywords used to decide whether a feed entry is worth extracting.
-# Matching is case-insensitive and only uses the feed text the provider
-# makes available. No scraping beyond the feed payload occurs.
+# ---------------------------------------------------------------------------
+# Policy applied to every outbound request.
+# ---------------------------------------------------------------------------
+source_policy:
+  # Identifying User-Agent. Override with LUMAVUN_USER_AGENT if needed.
+  user_agent: "LUMAVUN-Crypto-Agent/1.3 (+https://github.com/Nipzy12/Lumavun-Crypto-Agent)"
+  # Honor robots.txt for each host before requesting a source path.
+  respect_robots: true
+  # Minimum seconds between two requests to the same host.
+  min_interval_seconds: 1.5
+  # Per-source request timeout in seconds.
+  request_timeout_seconds: 20
+  # Maximum entries read from a single source per run.
+  max_entries_per_source: 15
+  # Maximum campaigns in the final report per run.
+  max_findings: 20
+
+# Keywords used to decide whether a source entry is a campaign candidate.
+# Matching is case-insensitive and only uses the payload the provider
+# published. No scraping beyond the feed/API payload occurs.
 discovery:
   campaign_keywords:
     - airdrop
     - testnet
+    - devnet
     - quest
     - reward
     - incentive
@@ -98,21 +364,198 @@ discovery:
   # guarantee legitimacy; it only tunes extraction.
   confirmation_signals:
     - campaign
+    - confirmed
+    - announcement
     - eligible
     - window
     - snapshot
     - distribution
     - claimed
     - claim
+    - genesis
 
-  # Terms that suggest speculation, rumor, or unverified chatter.
+  # Terms that suggest speculation, rumor, or unverified chatter. When any
+  # of these appear, the agent will not describe the entry as confirmed.
   speculation_signals:
     - rumored
     - rumour
+    - rumor
     - leak
     - maybe
     - potential
     - not confirmed
+    - expected to
+    - speculat
+    - proposes
+    - proposed
+    - plans to
+    - preliminary
+    - reportedly
+
+# ---------------------------------------------------------------------------
+# Opportunity classification (V1.3).
+#
+# These categories describe what kind of opportunity an entry is. They are
+# derived from the words the source published, never from assumptions.
+# A POINTS_PROGRAM is never described as a guaranteed token reward.
+# ---------------------------------------------------------------------------
+opportunity:
+  # Checked in this order; the first match wins.
+  priority:
+    - CONFIRMED_AIRDROP
+    - POINTS_PROGRAM
+    - TESTNET_POTENTIAL
+    - FREE_QUEST
+  signals:
+    CONFIRMED_AIRDROP:
+      - airdrop
+      - token distribution
+      - genesis
+      - snapshot
+      - claim live
+      - claim is live
+      - claim opens
+      - airdrop confirmed
+    POINTS_PROGRAM:
+      - points program
+      - points
+      - leaderboard
+      - season
+      - loyalty
+      - score
+    TESTNET_POTENTIAL:
+      - testnet
+      - devnet
+      - incentivized testnet
+      - validator
+      - node
+      - faucet
+    FREE_QUEST:
+      - quest
+      - quests
+      - tasks
+      - check-in
+      - check in
+      - follow
+      - join
+      - verify
+  # Phrases that mean "this is not a confirmed token promise".
+  downgrade_phrases:
+    - no token
+    - not confirmed
+    - no announcement
+    - unknown
+    - tba
+    - to be announced
+    - may or may not
+    - no guarantee
+
+  # Reward-status wording, in decreasing order of strength.
+  reward_statements:
+    stated:
+      - will distribute
+      - distribution of
+      - allocation of
+      - committed to
+      - total supply
+      - reserved
+      - airdrop of
+    points_only:
+      - points
+      - leaderboard
+      - score
+      - xp
+    unspecified:
+      - no details
+      - not announced
+      - to be announced
+      - tba
+  # If a reward sentence contains these, the reward is speculative.
+  speculative_reward_phrases:
+    - rumored
+    - expected
+    - may
+    - could
+    - potential
+    - anticipated
+    - speculation
+
+# ---------------------------------------------------------------------------
+# Zero-capital filter (V1.3).
+#
+# The agent prioritises opportunities that need no deposit, no purchase and
+# no paid gas transaction. It never recommends depositing money to unlock a
+# reward, and it reports unknown costs instead of assuming they are zero.
+# ---------------------------------------------------------------------------
+zero_capital:
+  # Hard blockers: if any of these appear, the campaign is not zero-capital.
+  blockers:
+    - deposit required
+    - minimum deposit
+    - make a deposit
+    - send funds
+    - send usd
+    - send sol
+    - send eth
+    - fund your wallet
+    - pay to claim
+    - pay-to-claim
+    - entry fee
+    - participation fee
+    - purchase tokens
+    - buy tokens
+    - presale
+    - must hold
+    - staking required
+    - gas fee required
+    - you pay gas
+  # Negations that flip a blocker match back to allowed when they appear in
+  # the same sentence shortly before the matched phrase.
+  negations:
+    - "no "
+    - "without "
+    - "never "
+    - "free"
+    - "not required"
+    - "zero cost"
+    - "does not require"
+  # Actions that need an on-chain transaction. They are allowed, but the
+  # agent flags the gas cost as unknown unless the source states it is free.
+  onchain_actions:
+    - bridge
+    - swap
+    - mint
+    - stake
+    - unstake
+    - deploy
+    - provide liquidity
+    - add liquidity
+    - sign a transaction
+    - send a transaction
+  # Phrases showing the source says gas is free / sponsored.
+  free_gas_phrases:
+    - gasless
+    - no gas
+    - gas is free
+    - sponsored gas
+    - free gas
+    - faucet
+  # Off-chain actions that cost nothing.
+  offchain_actions:
+    - follow
+    - join
+    - connect wallet
+    - submit
+    - verify
+    - complete
+    - check-in
+    - check in
+    - register
+    - sign up
+    - retweet
+    - react
+    - discord
+    - telegram
 
 # Risk rules. Each rule has a label and a simple text matcher.
 # Matchers are case-insensitive substring checks against the extracted
@@ -147,21 +590,31 @@ risk_rules:
       - "risk free profit"
       - "guaranteed earnings"
 
+  - id: drain_request
+    label: "Wallet-draining transaction request"
+    patterns:
+      - "approve all"
+      - "unlimited approval"
+      - "set approval for all"
+      - "sign this to receive"
+      - "drain"
+      - "sweep your"
+
   - id: suspicious_url
     label: "Suspicious URL or impersonation pattern"
     patterns:
       - "bit.ly"
       - "tinyurl"
       - "short.link"
-      - "discord.gg"  # context-dependent; keep as informational flag
-      - "t.me"        # context-dependent; keep as informational flag
+      - "discord.gg"  # context-dependent; informational flag
+      - "t.me"        # context-dependent; informational flag
 
   - id: unknown_project
     label: "Unknown or unverifiable project identity"
     patterns: []
     note: >
-      This rule is applied when project identity cannot be reliably extracted
-      from the feed entry. It is informational rather than a keyword match.
+      Applied when project identity cannot be reliably extracted from the
+      source entry. Informational rather than a keyword match.
 
   - id: unverifiable_reward
     label: "Unverifiable reward promise"
@@ -178,6 +631,25 @@ risk_rules:
       - "verified airdrop"
       - "only official"
 
+# Risk scoring. Scores are transparent heuristic indicators, not security
+# guarantees. Each hit contributes its weight; the total is capped.
+risk_scoring:
+  cap: 100
+  bands:
+    low_max: 20
+    medium_max: 50
+  weights:
+    secret_request: 45
+    drain_request: 40
+    deposit_required: 30
+    guaranteed_profit: 25
+    domain_mismatch: 20
+    suspicious_url: 15
+    impersonation: 12
+    unverifiable_reward: 10
+    unknown_project: 8
+    reward_claimed_but_unverified: 6
+
 # Risk classification thresholds. These are simple, transparent rules.
 classification:
   # HIGH_RISK_INDICATORS: one or more high-severity red flags present.
@@ -186,30 +658,22 @@ classification:
     - secret_request
     - guaranteed_profit
     - impersonation
-
-  # REVIEW_REQUIRED: moderate or multiple informational flags present,
-  # but no high-severity red flag.
-  review_required_if_high_count: 0
+    - drain_request
 
   # Rules that count as moderate rather than high severity.
   moderate_indicator_ids:
     - suspicious_url
     - unknown_project
     - unverifiable_reward
+    - domain_mismatch
 
 # RPC configuration reference.
 rpc:
-  # Primary RPC endpoint used when SOLANA_RPC_URL is not set.
   default_url: "https://api.mainnet-beta.solana.com"
-  # Recommended max response time before treating an endpoint as unhealthy.
   health_timeout_seconds: 10
-  # Health check method used to probe endpoint availability.
   health_method: "getHealth"
 
 # Dedup state retention.
 dedup:
-  # Maximum number of campaigns kept in persistent state between runs.
   max_entries: 200
-  # Number of days a campaign can remain in state without a refresh before
-  # it is considered stale and allowed to reappear as new.
   stale_days: 7
