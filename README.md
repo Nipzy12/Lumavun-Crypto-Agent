@@ -1,8 +1,21 @@
-# LUMAVUN Crypto Agent V1.3
+# LUMAVUN Crypto Agent V1.3.1
 
 A zero-capital airdrop intelligence system: it reads a registry of verified sources (RSS/Atom feeds and public JSON APIs), extracts campaigns with their evidence, classifies the opportunity, applies a zero-capital filter, scores explainable risk indicators, and sends actionable Telegram notifications. It also monitors a Phantom wallet's SOL and SPL balances read-only.
 
 **No guaranteed earnings. No automatic claiming, wallet signing, transactions, or trades.** Every report states this in plain words.
+
+## V1.3.1 reliability patch
+
+Validation: `python -m pytest tests -q` — **320 passed** in the cloud environment on 2026-11-06. External HTTP/RPC/Telegram behavior in the suite is mocked; this does not claim live source availability.
+
+- Actionable classification now requires a reward program, participation instructions, an explicitly named organizer, and an announcement on the same host as a configured official feed. A third-party `website_link` is a lead, not verification. Unsupported or incomplete entries remain `NEWS_ONLY` / `UNVERIFIED` in reports and never produce opportunity alerts. No keyword alone qualifies.
+- Cost status is `PASS`, `FAIL`, or `UNKNOWN`; the existing nullable `zero_capital_ok` remains compatible. Explicit free participation is required for PASS. Unknown fees, including unstated on-chain gas, never pass. Mandatory purchases, deposits, asset staking and trading fail, even with free gas. A faucet mention alone does not prove free gas.
+- SPL uses the complete Token Program ID and the three Solana RPC parameters: owner, program filter, and `jsonParsed` options. Malformed token data is unavailable, not an empty wallet. SOL zero balances remain valid.
+- Only evidence-verified, zero-capital PASS opportunities receive alerts. Each delivery is recorded independently; unsuccessful sends retry on later scans. A successful daily summary is sent once per UTC day, while new eligible opportunities can alert on either scheduled scan. Reports include rejected-news counts and verification status.
+- Canonical campaign IDs remove tracking parameters/fragments and sort query parameters while preserving path case and meaningful parameters. Headline changes do not change a URL's ID. Existing V1.3 delivery records migrate when the previous title/URL is available; unresolvable historical title changes cannot be reconstructed from old state.
+- No new environment variables, secrets, or dependencies. The existing GitHub Actions cron and read-only wallet behavior are preserved. The state schema remains backward compatible.
+
+Verification is conservative and based on the configured official-feed registry plus quoted text; it is not proof that a reward will be paid. Third-party-only opportunities need official evidence before alerting. Source counters cover entries examined under the existing per-source limits; report details retain the existing maximum-findings limit.
 
 ## What's new in V1.3
 

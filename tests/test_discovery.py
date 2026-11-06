@@ -235,7 +235,7 @@ class TestMultiSourceScan:
         assert {c.source_id for c in campaigns} == {"a", "b"}
         assert all(c.campaign_id for c in campaigns)
 
-    def test_entry_without_campaign_keywords_is_dropped(self, two_sources, config):
+    def test_entry_without_campaign_keywords_is_reported_as_news(self, two_sources, config):
         from discovery import scan_sources
         from sources import SourceSpec
 
@@ -246,10 +246,12 @@ class TestMultiSourceScan:
             m.get("https://a.example/feed.xml", text=xml, status_code=200)
             campaigns, health, errors = scan_sources(only, config=config, min_interval=0)
 
-        assert campaigns == []
+        assert len(campaigns) == 1
+        assert campaigns[0].opportunity_type == "NEWS_ONLY"
+        assert health[0].rejected_news == 1
         assert health[0].reachable is True
         assert health[0].entries_analyzed == 1
-        assert health[0].campaigns_found == 0
+        assert health[0].campaigns_found == 1
 
     def test_health_carries_http_metadata(self, two_sources, config):
         from discovery import scan_sources

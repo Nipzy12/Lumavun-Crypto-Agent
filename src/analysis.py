@@ -240,7 +240,7 @@ def extract_tasks(text: str, limit: int = 5) -> List[str]:
     found: List[str] = []
     for sentence in sentences(text):
         lowered = sentence.lower()
-        if any(signal in lowered for signal in TASK_SIGNALS):
+        if any(re.search(r"(?<!\w)" + re.escape(signal.strip()) + r"(?!\w)", lowered) for signal in TASK_SIGNALS):
             clipped = _clip(sentence, 180)
             if clipped and clipped not in found:
                 found.append(clipped)
@@ -347,6 +347,7 @@ OPPORTUNITY_TYPES = (
     "TESTNET_POTENTIAL",
     "FREE_QUEST",
     "UNVERIFIED",
+    "NEWS_ONLY",
 )
 
 
@@ -361,17 +362,22 @@ class Opportunity:
 
 def _hits(text: str, signals: Sequence[str]) -> List[str]:
     lowered = text.lower()
-    return [signal for signal in signals if str(signal).lower() in lowered]
+    return [signal for signal in signals if re.search(r"(?<!\w)" + re.escape(str(signal).lower().strip()) + r"(?!\w)", lowered)]
 
 
 def classify_opportunity(
     title: str,
     text: str,
     config: Dict[str, Any],
+    *, project: str = "", official_url: str = "", source_verified: bool = False,
 ) -> Opportunity:
     """Classify an entry into one of :data:`OPPORTUNITY_TYPES`.
 
     Order of reasoning:
+
+    Evidence for a program, participation, organizer and official announcement
+    is required before interpreting any type signals. Missing program/tasks
+    are NEWS_ONLY; missing provenance is UNVERIFIED.
 
     1. Any speculation signal makes the entry ``UNVERIFIED``. The agent will
        not upgrade rumor to fact.
@@ -381,6 +387,16 @@ def classify_opportunity(
     3. Otherwise points, testnet and quest signals are checked in order.
     """
     combined = f"{title} {text}"
+    program = re.search(r"\b(?:airdrop|reward|incentive|points|quest|bounty)\s+(?:program|campaign|pool|season)|\b(?:earn|receive|win|claim|distribute[sd]?)\b.{0,80}\b(?:tokens?|points|rewards?|prizes?|airdrop)\b", combined, re.I)
+    tasks = [task for task in extract_tasks(text) if re.search(
+        r"(?:^|[.;:]\s*|\b(?:must|should|need to|participants? (?:must|can))\s+)(?:follow|join|connect|submit|verify|complete|register|sign up|retweet|bridge|swap|mint|stake|deploy|hold|vote)\b", task, re.I
+    )]
+    if re.search(r"\b(?:no|not an?|cancelled|canceled)\s+(?:reward|airdrop|incentive|points|quest)\s+(?:program|campaign)\b", combined, re.I):
+        return Opportunity(type="UNVERIFIED", reason="Program disangkal atau dibatalkan oleh sumber.")
+    if not program or not tasks:
+        return Opportunity(type="NEWS_ONLY", reason="Tidak ada program hadiah dan persyaratan partisipasi yang dapat dikutip.")
+    if not project or not official_url or not source_verified:
+        return Opportunity(type="UNVERIFIED", reason="Identitas penyelenggara atau pengumuman resmi belum terverifikasi.")
     opportunity = config.get("opportunity", {}) or {}
     signals_cfg = opportunity.get("signals", {}) or {}
     discovery_cfg = config.get("discovery", {}) or {}
@@ -464,10 +480,15 @@ class ZeroCapital:
     onchain_actions: List[str] = field(default_factory=list)
     offchain_actions: List[str] = field(default_factory=list)
 
+    @property
+    def status(self) -> str:
+        return "PASS" if self.ok is True else "FAIL" if self.ok is False else "UNKNOWN"
+
 
 def _negated(sentence: str, match_start: int, negations: Sequence[str]) -> bool:
     window = sentence[max(0, match_start - 45) : match_start].lower()
-    return any(neg in window for neg in negations)
+    window = re.split(r"[.;]|\bbut\b|\bhowever\b", window)[-1]
+    return any(re.search(r"\b" + re.escape(neg.strip()) + r"\b", window) for neg in negations)
 
 
 def evaluate_zero_capital(
@@ -493,7 +514,7 @@ def evaluate_zero_capital(
         needle = str(pattern).lower()
         if not needle:
             continue
-        for match in re.finditer(re.escape(needle), lowered):
+        for match in re.finditer(r"(?<!\w)" + re.escape(needle) + r"(?!\w)", lowered):
             if _negated(lowered, match.start(), negations):
                 continue
             if needle not in blockers:
@@ -511,9 +532,16 @@ def evaluate_zero_capital(
         if str(action).lower() in lowered
     ]
     free_gas = any(
-        str(p).lower() in lowered for p in zc.get("free_gas_phrases", []) or []
+        str(p).lower() in lowered for p in zc.get("free_gas_phrases", []) or [] if str(p).lower() != "faucet"
     )
 
+    # Mandatory asset use is capital even when gas is sponsored.
+    for sentence in sentences(combined):
+        if re.search(r"\b(?:must|required to|need to)\s+(?:deposit|buy|purchase|stake|trade|swap|pay|hold)\b", sentence, re.I) and not re.search(r"\b(?:not|never)\s+(?:required|need)\b", sentence, re.I):
+            blockers.append(_clip(sentence))
+    for sentence in sentences(combined):
+        if re.search(r"^(?:to (?:qualify|participate|join)[,:]?\s*)?(?:deposit|buy|purchase|stake|trade|swap|pay)\b", sentence, re.I) and not re.search(r"\b(?:optional|testnet|faucet|test tokens)\b", sentence, re.I):
+            blockers.append(_clip(sentence))
     if blockers:
         return ZeroCapital(
             ok=False,
@@ -538,25 +566,15 @@ def evaluate_zero_capital(
             offchain_actions=offchain,
         )
 
-    if onchain and free_gas:
-        return ZeroCapital(
-            ok=True,
-            reason="Aksi on-chain dengan gas gratis/faucet yang disebut sumber.",
-            onchain_actions=onchain,
-            offchain_actions=offchain,
-        )
-
-    if offchain:
-        return ZeroCapital(
-            ok=True,
-            reason="Hanya aksi off-chain: " + ", ".join(offchain[:3]),
-            offchain_actions=offchain,
-        )
-
-    return ZeroCapital(
-        ok=True,
-        reason="Tidak ada setoran, pembelian, atau biaya yang disebutkan.",
-    )
+    explicitly_free = bool(re.search(
+        r"\b(?:free to (?:participate|join|enter)|participation is free|no (?:mandatory )?(?:payment|purchase|fees?) (?:is )?required|all (?:tasks|participation) (?:are|is) free)\b", lowered
+    ))
+    if re.search(r"\b(?:not|never)\s+(?:free|gasless)|gas is not free", lowered):
+        explicitly_free = False
+        free_gas = False
+    if explicitly_free and (not onchain or free_gas):
+        return ZeroCapital(ok=True, reason="Sumber menyatakan partisipasi tanpa pembayaran wajib.", onchain_actions=onchain, offchain_actions=offchain)
+    return ZeroCapital(ok=None, reason="Bukti biaya partisipasi belum lengkap.", unknown_costs=["Biaya tidak terverifikasi"], onchain_actions=onchain, offchain_actions=offchain)
 
 
 # ---------------------------------------------------------------------------

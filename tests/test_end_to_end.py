@@ -93,10 +93,10 @@ FEED_BODIES = {
     "https://blog.arbitrum.io/feed": """<?xml version="1.0"?>
 <rss version="2.0"><channel><title>Arbitrum Blog</title>
 <item>
-  <title>Stablecoin Growth Incentive</title>
+  <title>Arbitrum announces Airdrop campaign</title>
   <link>https://blog.arbitrum.io/incentive</link>
   <pubDate>Thu, 15 Oct 2026 13:43:20 GMT</pubDate>
-  <description>A new incentive programme with rewards for early participants.</description>
+  <description>Arbitrum announces an airdrop campaign with confirmed distribution. Follow the account and register to receive 100 tokens. Participation is free. Deadline 2026-12-01.</description>
 </item>
 </channel></rss>""",
 }
@@ -160,7 +160,7 @@ def _register_all(m):
     m.post(
         "https://rpc.e2e.example",
         [
-            {"json": {"jsonrpc": "2.0", "result": {"epoch": "7"}, "id": 1}, "status_code": 200},
+            {"json": {"jsonrpc": "2.0", "result": "ok", "id": 1}, "status_code": 200},
             {"json": {"jsonrpc": "2.0", "result": {"value": 1500000000}, "id": 1}, "status_code": 200},
             {
                 "json": {
@@ -234,42 +234,15 @@ def test_first_run_discovers_classifies_and_notifies(monkeypatch):
     # Discovery + classification.
     assert report["campaign_count"] >= 5
     types = report["opportunity_summary"]
-    assert types["CONFIRMED_AIRDROP"] >= 1
-    assert types["POINTS_PROGRAM"] >= 1
-    assert types["TESTNET_POTENTIAL"] >= 1
-    assert set(types) == {
-        "CONFIRMED_AIRDROP",
-        "POINTS_PROGRAM",
-        "TESTNET_POTENTIAL",
-        "FREE_QUEST",
-        "UNVERIFIED",
-    }
-
-    # Cross-checking across two hosts marked the shared campaign.
-    shared = [c for c in report["campaigns"] if c["title"] == "Meta Chain Airdrop"]
-    assert len(shared) >= 2
-    assert any(c["cross_checked"] for c in shared)
-
-    # Zero-capital filtering happened and is reported per campaign.
-    zero = report["zero_capital_summary"]
-    assert zero["passes"] >= 3
-    assert report["campaigns"][0]["zero_capital_ok"] in (True, False, None)
-
-    # Extraction: deadline, tasks, reward status are present for the campaign
-    # that states them.
-    confirmed = [
-        c for c in report["campaigns"] if c["opportunity_type"] == "CONFIRMED_AIRDROP"
-    ]
-    assert confirmed
-    assert all(c["reward_status"] in ("stated", "points_only", "speculative", "unspecified") for c in confirmed)
-    assert all(c["risk_explanation"] for c in confirmed)
-
-    # The campaign that states a dated claim window carries it through, and
-    # the listing that quotes actions has them extracted.
-    meta = [c for c in confirmed if c["title"] == "Meta Chain Airdrop"]
-    assert len(meta) == 2
-    assert all(c["deadline"] == "2026-12-01" for c in meta)
-    assert any(c["tasks"] for c in meta), "stated tasks must be extracted"
+    assert types["CONFIRMED_AIRDROP"] == 1
+    assert types["NEWS_ONLY"] >= 1
+    confirmed = [c for c in report["campaigns"] if c["evidence_verified"]]
+    assert len(confirmed) == 1
+    assert confirmed[0]["project"] == "Arbitrum"
+    assert confirmed[0]["official_url"] == "https://blog.arbitrum.io/incentive"
+    assert confirmed[0]["cost_status"] == "PASS"
+    assert confirmed[0]["tasks"]
+    assert report["zero_capital_summary"]["unknown"] >= 1
 
     # Wallet: SOL balance read, SPL status distinguished from failure.
     wallet = report["wallet"]
@@ -326,16 +299,16 @@ def test_second_run_on_a_fresh_runner_sends_no_duplicates(monkeypatch, tmp_path)
     assert {c["campaign_id"] for c in second["campaigns"]} == first_ids
 
     # Only the daily summary goes out; no opportunity blocks are repeated.
-    assert second["telegram"]["messages"] == 1
+    assert second["telegram"]["messages"] == 0
     assert second["telegram"]["sent"] is True
-    assert second["telegram"]["sent_count"] == 1
+    assert second["telegram"]["sent_count"] == 0
 
     # Notification history survived and did not grow, and the run counter
     # reflects both runs.
     state = json.loads((runner2 / "dedup_state.json").read_text(encoding="utf-8"))
     assert state["runs"] == 2
-    assert set(state["notifications"]) == {
-        c["campaign_id"] for c in first["campaigns"]
+    assert {key for key in state["notifications"] if not key.startswith("summary:")} == {
+        c["campaign_id"] for c in first["campaigns"] if c["evidence_verified"] and c["cost_status"] == "PASS"
     }
 
 

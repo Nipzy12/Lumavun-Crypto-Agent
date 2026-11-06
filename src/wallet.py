@@ -25,7 +25,7 @@ from config_loader import load_config
 
 DEFAULT_RPC_TIMEOUT = 20
 ADDRESS_REGEX = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
-TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss6"
+TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 
 
 def validate_solana_address(address: str) -> bool:
@@ -96,10 +96,8 @@ def check_rpc_health(url: str, timeout: int = DEFAULT_RPC_TIMEOUT) -> Tuple[bool
             {"jsonrpc": "2.0", "id": 1, "method": "getHealth"},
             timeout=timeout,
         )
-        status = body.get("result", {})
-        if isinstance(status, dict):
-            epoch = str(status.get("epoch", ""))
-            return True, f"ok (epoch {epoch})"
+        if body.get("result") != "ok":
+            return False, "RPC health response was not ok"
         return True, "ok"
     except RuntimeError as exc:
         return False, str(exc)[:160]
@@ -134,7 +132,7 @@ def get_sol_balance(
         if not isinstance(result, dict):
             return None
         value = result.get("value")
-        if value is None:
+        if type(value) is not int or value < 0:
             return None
         return int(value) / 1_000_000_000
     except RuntimeError:
@@ -184,9 +182,19 @@ def _parse_token_amount(account: Any) -> Optional[Dict[str, Any]]:
     if ui_amount is None and raw_amount is not None and decimals is not None:
         try:
             ui_amount = int(raw_amount) / (10 ** int(decimals))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             ui_amount = None
 
+    import math
+    try:
+        if type(decimals) is not int or not 0 <= decimals <= 255:
+            return None
+        if not isinstance(raw_amount, (str, int)) or isinstance(raw_amount, bool) or not re.fullmatch(r"[0-9]+", str(raw_amount)):
+            return None
+        if isinstance(ui_amount, bool) or not isinstance(ui_amount, (float, int)) or not math.isfinite(ui_amount) or ui_amount < 0:
+            return None
+    except (TypeError, ValueError, OverflowError):
+        return None
     return {
         "mint": mint,
         "raw_balance": raw_amount,
@@ -236,13 +244,13 @@ def query_token_accounts(
     if not isinstance(value, list):
         return None, "RPC result had no token account list"
 
-    filter_set = {m.strip().lower() for m in (mint_filter or []) if m.strip()}
+    filter_set = {m.strip() for m in (mint_filter or []) if m.strip()}
     tokens: List[Dict[str, Any]] = []
     for account in value:
         parsed = _parse_token_amount(account)
-        if parsed is None:
-            continue
-        if filter_set and parsed["mint"].lower() not in filter_set:
+        if parsed is None or parsed["ui_amount"] is None:
+            return None, "RPC returned malformed token account"
+        if filter_set and parsed["mint"] not in filter_set:
             continue
         tokens.append(parsed)
     return tokens, None

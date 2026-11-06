@@ -101,6 +101,9 @@ class Campaign:
     cross_checked: bool = False
     cross_check_note: str = ""
     published_ts: Optional[float] = None
+    evidence_verified: bool = False
+    source_verification_status: str = "unverified"
+    cost_status: str = "UNKNOWN"
 
     def __post_init__(self) -> None:
         # Every campaign identifies itself the moment it exists, so reports,
@@ -125,6 +128,8 @@ class SourceHealth:
     http_status: Optional[int] = None
     content_type: str = ""
     robots_blocked: bool = False
+    rejected_news: int = 0
+    verified_opportunities: int = 0
 
 
 def _normalize(text: str) -> str:
@@ -275,19 +280,22 @@ def _build_campaign(
     config: Dict[str, Any],
 ) -> Optional[Campaign]:
     """Turn one raw source entry into an analysed campaign, or None."""
-    keywords = config.get("discovery", {}).get("campaign_keywords", []) or []
     title = _normalize(item.title)[:120]
     if not title:
         return None
     summary = _normalize(item.summary)
     gate_text = f"{title} {summary}"
-    if keywords and not _matches_keywords(gate_text, keywords):
-        return None
 
     summary_short = summary[:350]
-    project = _extract_project(title, summary) or title
     url = item.url or item.listing_url
-    official_url = item.official_url or ""
+    from urllib.parse import urlsplit
+    # Trust only an announcement served on the configured official feed host.
+    # Third-party website_link metadata alone cannot verify an organizer.
+    announcement = item.listing_url or url
+    source_verified = bool(spec.official and validate_source_url(announcement) and urlsplit(announcement).hostname == urlsplit(spec.url).hostname)
+    official_url = announcement if source_verified else ""
+    organizer = re.search(r"\b([A-Z][A-Za-z0-9-]*(?: [A-Z][A-Za-z0-9-]*){0,3}) (?:announces|launches|offers|introduces)\b", f"{title}. {summary}")
+    project = organizer.group(1) if organizer else ""
 
     is_confirmed, is_speculation = _classify_confidence(title, summary, config)
 
@@ -313,7 +321,7 @@ def _build_campaign(
             flags.append("domain_mismatch")
         extra_flags["domain_mismatch"] = mismatch_note
 
-    opportunity = classify_opportunity(title, summary, config)
+    opportunity = classify_opportunity(title, summary, config, project=project, official_url=official_url, source_verified=source_verified)
     zero_capital = evaluate_zero_capital(title, summary, config)
     deadline = extract_deadline(summary)
     reward = extract_reward(summary, config)
@@ -331,7 +339,7 @@ def _build_campaign(
         requirements=requirements,
         risk_flags=flags,
         classification=_classify_risk(flags, config),
-        is_confirmed=is_confirmed,
+        is_confirmed=opportunity.type == "CONFIRMED_AIRDROP",
         is_speculation=is_speculation,
         raw_summary=summary_short,
         source_id=spec.id,
@@ -341,6 +349,9 @@ def _build_campaign(
         announcement_url=item.listing_url or url,
         official_url=official_url,
         opportunity_type=opportunity.type,
+        evidence_verified=opportunity.type not in ("NEWS_ONLY", "UNVERIFIED"),
+        source_verification_status="official_feed" if source_verified else "unverified",
+        cost_status=zero_capital.status,
         opportunity_reason=opportunity.reason,
         deadline=deadline.iso if deadline else None,
         deadline_text=deadline.text if deadline else None,
@@ -365,20 +376,17 @@ def _build_campaign(
 def campaign_id_for(campaign: Campaign) -> str:
     """Stable identifier for a campaign across runs.
 
-    Derived from the project key, the title and the target URL, so the same
-    campaign keeps the same id even when the report is rebuilt from a
-    different run. Nothing time-dependent is included.
+    Derived from the canonical target URL, independent of title and source.
+    Preserve path case and semantic query values; remove tracking and fragment.
+    Entries without a URL use a conservative title/project/source fallback.
     """
-    key = project_key(campaign.project, campaign.title)
-    parts = [
-        key,
-        _normalize(campaign.title).lower(),
-        _normalize(campaign.url).lower(),
-    ]
-    if not campaign.url:
-        parts.append(_normalize(campaign.source).lower())
-    joined = "\x00".join(part for part in parts if part)
-    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:24]
+    from sources import sanitize_url
+    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+    raw = sanitize_url(campaign.url or campaign.announcement_url)
+    parsed = urlsplit(raw)
+    canonical = urlunsplit((parsed.scheme.lower(), parsed.netloc.lower().removesuffix(":443"), parsed.path or "/", urlencode(sorted(parse_qsl(parsed.query, keep_blank_values=True))), ""))
+    key = canonical if raw else "\x00".join([campaign.project, campaign.title, campaign.source])
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
 
 
 def _priority_rank(campaign: Campaign) -> int:
@@ -392,7 +400,7 @@ def _priority_rank(campaign: Campaign) -> int:
 
 def _sort_key(campaign: Campaign) -> Tuple[int, int, float]:
     recency = -(campaign.published_ts or 0.0)
-    return (_priority_rank(campaign), campaign.risk_score, recency)
+    return (0 if campaign.evidence_verified and campaign.zero_capital_ok is True else 1 + _priority_rank(campaign), campaign.risk_score, recency)
 
 
 def _health_from_result(result: SourceResult, found: int) -> SourceHealth:
@@ -454,13 +462,20 @@ def scan_sources(
             session=session,
         )
         found = 0
+        rejected_news = 0
+        verified_opportunities = 0
         for item in result.items[:max_entries]:
             campaign = _build_campaign(item, spec, config)
             if campaign is None:
                 continue
             campaigns.append(campaign)
+            rejected_news += campaign.opportunity_type == "NEWS_ONLY"
+            verified_opportunities += campaign.evidence_verified and campaign.zero_capital_ok is True
             found += 1
-        health_list.append(_health_from_result(result, found))
+        health = _health_from_result(result, found)
+        health.rejected_news = rejected_news
+        health.verified_opportunities = verified_opportunities
+        health_list.append(health)
         if result.error:
             errors.append(f"Source error ({spec.id}): {result.error}")
 
@@ -539,6 +554,7 @@ def deduplicate_campaigns(
     seen: Dict[str, Dict[str, Any]] = state.get("seen", {}) or {}
     updated = dict(state)
     updated["seen"] = dict(seen)
+    updated["notifications"] = dict(state.get("notifications") or {})
     new_campaigns: List[Campaign] = []
     duplicates_skipped: List[Campaign] = []
 
@@ -548,6 +564,13 @@ def deduplicate_campaigns(
             new_campaigns.append(campaign)
             continue
         campaign.campaign_id = key
+        # Migrate V1.3 title-dependent IDs when the old title is available.
+        old_parts = [project_key(campaign.title, campaign.title), _normalize(campaign.title).lower(), _normalize(campaign.url).lower()]
+        old_id = hashlib.sha256("\x00".join(old_parts).encode("utf-8")).hexdigest()[:24]
+        if old_id in updated["notifications"]:
+            updated["notifications"][key] = dict(updated["notifications"][old_id])
+        if old_id in updated["seen"] and key not in updated["seen"]:
+            updated["seen"][key] = dict(updated["seen"][old_id])
         previous = updated["seen"].get(key)
         legacy_key = _legacy_dedup_key(campaign)
         if previous is None and legacy_key in updated["seen"]:

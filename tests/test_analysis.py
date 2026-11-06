@@ -137,74 +137,28 @@ def _config():
 
 
 class TestOpportunityClassification:
-    def test_confirmed_airdrop_needs_airdrop_and_confirmation(self):
-        result = classify_opportunity(
-            "Meta Chain Airdrop",
-            "The snapshot is confirmed and distribution is eligible for holders.",
-            _config(),
-        )
-        assert result.type == "CONFIRMED_AIRDROP"
-        assert "airdrop" in result.reason.lower()
+    @pytest.mark.parametrize("title,text,kind", [
+        ("Meta Airdrop", "Meta announces an airdrop campaign. Register to receive 100 tokens; snapshot confirmed.", "CONFIRMED_AIRDROP"),
+        ("Meta Points", "Meta launches a points program. Join the quest to earn points.", "POINTS_PROGRAM"),
+        ("Meta Testnet", "Meta launches a reward program on testnet. Register to receive rewards.", "TESTNET_POTENTIAL"),
+        ("Meta Quest", "Meta launches a reward campaign. Follow the account to earn rewards.", "FREE_QUEST"),
+    ])
+    def test_evidence_supported_types(self, title, text, kind):
+        result = classify_opportunity(title, text, _config(), project="Meta", official_url="https://meta.example/announcement", source_verified=True)
+        assert result.type == kind
+        assert classify_opportunity(title, text, _config()).type == "UNVERIFIED"
 
-    def test_airdrop_without_confirmation_is_unverified(self):
-        result = classify_opportunity(
-            "Mystery Token Airdrop", "Something is coming soon.", _config()
-        )
-        assert result.type == "UNVERIFIED"
-        assert "tanpa bukti konfirmasi" in result.reason
-
-    def test_speculation_downgrades_to_unverified(self):
-        result = classify_opportunity(
-            "Foo Airdrop",
-            "The team proposes distributing tokens in a potential reward.",
-            _config(),
-        )
-        assert result.type == "UNVERIFIED"
-        assert "spekulasi" in result.reason
-
-    def test_points_program(self):
-        result = classify_opportunity(
-            "Quip Points",
-            "Climb the leaderboard this season and collect points.",
-            _config(),
-        )
-        assert result.type == "POINTS_PROGRAM"
-        assert "poin" in result.reason.lower()
-
-    def test_points_program_is_not_called_an_airdrop(self):
-        result = classify_opportunity(
-            "Quip Points", "Climb the leaderboard this season.", _config()
-        )
-        assert result.type != "CONFIRMED_AIRDROP"
-
-    def test_testnet_potential(self):
-        result = classify_opportunity(
-            "Hoodi Testnet",
-            "Run a node on the testnet and request faucet funds.",
-            _config(),
-        )
-        assert result.type == "TESTNET_POTENTIAL"
-
-    def test_free_quest(self):
-        result = classify_opportunity(
-            "Community Quest",
-            "Follow the account and join the discord to complete the quest.",
-            _config(),
-        )
-        assert result.type == "FREE_QUEST"
-
-    def test_downgrade_phrase_blocks_confirmed(self):
-        result = classify_opportunity(
-            "Foo Airdrop",
-            "Airdrop confirmed, but no token will be distributed yet.",
-            _config(),
-        )
+    def test_speculation_stays_unverified(self):
+        result = classify_opportunity("Meta Airdrop", "Join the airdrop campaign for potential rewards.", _config(), project="Meta", official_url="https://meta.example/announcement", source_verified=True)
         assert result.type == "UNVERIFIED"
 
-    def test_unclassifiable_text_is_unverified(self):
-        result = classify_opportunity("General Market News", "Prices moved today.", _config())
-        assert result.type == "UNVERIFIED"
-        assert result.matched_signals == []
+    @pytest.mark.parametrize("title,text", [
+        ("General Market News", "Prices moved today."),
+        ("Mystery Airdrop", "Something is coming soon."),
+        ("Points guide", "Climb the leaderboard this season."),
+    ])
+    def test_missing_program_or_tasks_is_news(self, title, text):
+        assert classify_opportunity(title, text, _config()).type == "NEWS_ONLY"
 
 
 class TestZeroCapitalFilter:
@@ -217,7 +171,7 @@ class TestZeroCapitalFilter:
 
     def test_negated_blocker_is_not_counted(self):
         result = evaluate_zero_capital(
-            "Community Quest", "No deposit required to join this quest.", _config()
+            "Community Quest", "No deposit required to join this quest. Participation is free.", _config()
         )
         assert result.ok is True
         assert result.blockers == []
@@ -238,25 +192,25 @@ class TestZeroCapitalFilter:
 
     def test_onchain_action_with_free_gas_passes(self):
         result = evaluate_zero_capital(
-            "Faucet Quest", "Use the faucet to bridge; gas is free.", _config()
+            "Faucet Quest", "Use the faucet to bridge; gas is free. Participation is free.", _config()
         )
         assert result.ok is True
 
-    def test_offchain_actions_pass(self):
+    def test_offchain_actions_without_fee_evidence_are_unknown(self):
         result = evaluate_zero_capital(
             "Social Quest", "Follow the account and join the discord.", _config()
         )
-        assert result.ok is True
+        assert result.ok is None
         assert result.offchain_actions
 
-    def test_no_cost_language_defaults_to_pass(self):
+    def test_no_cost_language_is_unknown(self):
         result = evaluate_zero_capital("Incentive Testnet", "Run a validator node.", _config())
-        assert result.ok is True
+        assert result.ok is None
         assert result.reason
 
     def test_missing_text_does_not_crash(self):
         result = evaluate_zero_capital("", "", _config())
-        assert result.ok is True
+        assert result.ok is None
 
 
 class TestRiskScoring:

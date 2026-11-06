@@ -303,7 +303,7 @@ def record_notification(
 
 def was_notified(state: Dict[str, Any], campaign_id: str) -> bool:
     notifications = state.get("notifications") or {}
-    return campaign_id in notifications
+    return campaign_id in notifications or bool((state.get("seen") or {}).get(campaign_id, {}).get("notified"))
 
 
 def mark_run(state: Dict[str, Any]) -> Dict[str, Any]:

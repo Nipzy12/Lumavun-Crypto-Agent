@@ -96,7 +96,7 @@ def test_report_carries_v13_structure():
         total_found=9,
         state_source="run:123",
     )
-    assert report["version"] == "1.3"
+    assert report["version"] == "1.3.1"
     assert report["state_source"] == "run:123"
     assert report["campaign_count"] == 1
     assert report["total_found"] == 9
@@ -112,6 +112,7 @@ def test_report_carries_v13_structure():
         "TESTNET_POTENTIAL",
         "FREE_QUEST",
         "UNVERIFIED",
+        "NEWS_ONLY",
     }
     assert report["opportunity_summary"]["CONFIRMED_AIRDROP"] == 1
     assert report["zero_capital_summary"] == {"passes": 1, "blocked": 0, "unknown": 0}

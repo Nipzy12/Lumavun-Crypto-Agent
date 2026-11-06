@@ -14,13 +14,14 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from discovery import Campaign, SourceHealth
 
-AGENT_VERSION = "1.3"
+AGENT_VERSION = "1.3.1"
 OPPORTUNITY_TYPES = (
     "CONFIRMED_AIRDROP",
     "POINTS_PROGRAM",
     "TESTNET_POTENTIAL",
     "FREE_QUEST",
     "UNVERIFIED",
+    "NEWS_ONLY",
 )
 
 
@@ -52,6 +53,9 @@ def _campaign_dict(c: Campaign) -> Dict[str, Any]:
         "opportunity_reason": c.opportunity_reason,
         "official_url": c.official_url,
         "zero_capital_ok": c.zero_capital_ok,
+        "cost_status": c.cost_status,
+        "evidence_verified": c.evidence_verified,
+        "source_verification_status": c.source_verification_status,
         "zero_capital_reason": c.zero_capital_reason,
         "zero_capital_blockers": list(c.zero_capital_blockers),
         "unknown_costs": list(c.unknown_costs),
@@ -100,6 +104,8 @@ def build_report(
                 "http_status": h.http_status,
                 "content_type": h.content_type,
                 "robots_blocked": h.robots_blocked,
+                "rejected_news": h.rejected_news,
+                "verified_opportunities": h.verified_opportunities,
             }
             for h in source_health
         ],
@@ -108,6 +114,8 @@ def build_report(
             "reachable": sum(1 for h in source_health if h.reachable),
             "official_sources": sum(1 for h in source_health if h.official),
         },
+        "rejected_news_count": sum(h.rejected_news for h in source_health),
+        "verified_opportunities": sum(h.verified_opportunities for h in source_health),
         "campaigns": campaign_dicts,
         "campaign_count": len(campaign_dicts),
         "total_found": total_found if total_found is not None else len(campaign_dicts),

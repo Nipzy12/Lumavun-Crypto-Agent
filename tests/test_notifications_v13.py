@@ -25,6 +25,9 @@ import requests_mock
 def full_campaign(**overrides):
     payload = {
         "campaign_id": "abc123",
+        "evidence_verified": True,
+        "cost_status": "PASS",
+        "source_verification_status": "official_feed",
         "title": "Meta Chain Airdrop",
         "project": "Meta Chain",
         "url": "https://proof.meta.io/",
@@ -250,7 +253,7 @@ class TestChunking:
             source_health=HEALTH,
             errors=[],
         )
-        assert messages[0].startswith("LUMAVUN Crypto Agent V1.3 - ringkasan harian")
+        assert messages[0].startswith("LUMAVUN Crypto Agent V1.3.1 - ringkasan harian")
         assert all(len(m.encode("utf-8")) <= 4000 for m in messages)
         # Opportunity blocks are grouped, three per message.
         block_messages = messages[1:]

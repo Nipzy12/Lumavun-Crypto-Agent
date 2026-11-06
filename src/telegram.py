@@ -1,5 +1,5 @@
 """
-Telegram notification engine (V1.3).
+Telegram notification engine (V1.3.1).
 
 Sends an Indonesian daily summary plus one block per newly discovered
 opportunity. Each block answers the questions a reader actually needs:
@@ -39,6 +39,7 @@ TYPE_LABELS = {
     "TESTNET_POTENTIAL": "TESTNET_POTENTIAL",
     "FREE_QUEST": "FREE_QUEST",
     "UNVERIFIED": "UNVERIFIED",
+    "NEWS_ONLY": "NEWS_ONLY",
 }
 
 REWARD_LABELS = {
@@ -259,6 +260,7 @@ def build_opportunity_block(campaign: Dict[str, Any], index: int) -> str:
         heading = f"{index}. {project} - {title}"
 
     lines: List[str] = [heading]
+    lines.append(f"   Proyek: {project or chr(45)}")
     lines.append(f"   Tipe: {TYPE_LABELS.get(opp_type, opp_type)}")
     if reason:
         lines.append(f"   Alasan: {reason}")
@@ -300,6 +302,8 @@ def build_opportunity_block(campaign: Dict[str, Any], index: int) -> str:
     else:
         lines.append("   Deadline: tidak disebutkan sumber")
 
+    lines.append("   Biaya: " + str(campaign.get("cost_status") or "UNKNOWN"))
+    lines.append("   Status sumber: " + str(campaign.get("source_verification_status") or "unverified"))
     lines.append("   " + _fmt_zero_capital(campaign))
     for line in _fmt_risk(campaign):
         lines.append("   " + line)
@@ -337,12 +341,18 @@ def build_daily_summary(
     zero_no = sum(1 for i in items if i.get("zero_capital_ok") is False)
     zero_unknown = sum(1 for i in items if i.get("zero_capital_ok") is None)
 
+    rejected = sum(i.get("opportunity_type") == "NEWS_ONLY" for i in items)
+    verified = sum(i.get("evidence_verified") is True and i.get("zero_capital_ok") is True for i in items)
+    if any("rejected_news" in source for source in sources):
+        rejected = sum(source.get("rejected_news", 0) for source in sources)
+        verified = sum(source.get("verified_opportunities", 0) for source in sources)
     new_count = len(items)
     total = total_found if total_found is not None else new_count
 
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.3 - ringkasan harian")
+    lines.append("LUMAVUN Crypto Agent V1.3.1 - ringkasan harian")
     lines.append(f"Scan: {scan_time}")
+    lines.append(f"Berita ditolak: {rejected} | peluang terverifikasi tanpa biaya: {verified} | errors: {len(errors)}")
     lines.append("")
     lines.append(_fmt_sol(wallet_summary))
     lines.append(_fmt_tokens(wallet_summary))
@@ -447,7 +457,7 @@ def build_messages(
     )
     messages: List[str] = [summary]
 
-    items = list(campaigns)[:max_opportunities]
+    items = [c for c in campaigns if c.get("evidence_verified") is True and c.get("zero_capital_ok") is True][:max_opportunities]
     if items:
         for start in range(0, len(items), MAX_BLOCKS_PER_MESSAGE):
             group = items[start : start + MAX_BLOCKS_PER_MESSAGE]
@@ -457,9 +467,10 @@ def build_messages(
             ]
             messages.append("\n\n".join(blocks))
 
-    if len(campaigns) > len(items):
+    eligible_count = sum(c.get("evidence_verified") is True and c.get("zero_capital_ok") is True for c in campaigns)
+    if eligible_count > len(items):
         messages.append(
-            f"... dan {len(campaigns) - len(items)} peluang lain ada di laporan JSON/Markdown."
+            f"... dan {eligible_count - len(items)} peluang lain ada di laporan JSON/Markdown."
         )
 
     flattened: List[str] = []
@@ -481,7 +492,7 @@ def build_report_message(
     richer output lives in :func:`build_messages`.
     """
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.3")
+    lines.append("LUMAVUN Crypto Agent V1.3.1")
     lines.append("")
     lines.append(f"Waktu scan: {scan_time}")
     lines.append("")

@@ -50,7 +50,7 @@ class TestRpcHealth:
         with requests_mock.Mocker() as m:
             m.post(
                 "https://rpc.example.com",
-                json={"jsonrpc": "2.0", "result": {"epoch": "1234"}, "id": 1},
+                json={"jsonrpc": "2.0", "result": "ok", "id": 1},
                 status_code=200,
             )
             healthy, msg = check_rpc_health("https://rpc.example.com")
@@ -156,7 +156,7 @@ class TestReadWallet:
                 "https://rpc.example.com",
                 [
                     # 1) getHealth
-                    {"json": {"jsonrpc": "2.0", "result": {"epoch": "1"}, "id": 1}, "status_code": 200},
+                    {"json": {"jsonrpc": "2.0", "result": "ok", "id": 1}, "status_code": 200},
                     # 2) getBalance -> 0 lamports, a successful response
                     {"json": {"jsonrpc": "2.0", "result": {"value": 0}, "id": 1}, "status_code": 200},
                     # 3) getTokenAccountsByOwner -> no token accounts
@@ -176,7 +176,7 @@ class TestReadWallet:
             m.post(
                 "https://rpc.example.com",
                 [
-                    {"json": {"jsonrpc": "2.0", "result": {"epoch": "1"}, "id": 1}, "status_code": 200},
+                    {"json": {"jsonrpc": "2.0", "result": "ok", "id": 1}, "status_code": 200},
                     {"json": {"jsonrpc": "2.0", "result": {"value": 1250000000}, "id": 1}, "status_code": 200},
                     {"json": {"jsonrpc": "2.0", "result": {"value": []}, "id": 1}, "status_code": 200},
                 ],
@@ -191,7 +191,7 @@ class TestReadWallet:
             m.post(
                 "https://fallback.example",
                 [
-                    {"json": {"jsonrpc": "2.0", "result": {"epoch": "9"}, "id": 1}, "status_code": 200},
+                    {"json": {"jsonrpc": "2.0", "result": "ok", "id": 1}, "status_code": 200},
                     {"json": {"jsonrpc": "2.0", "result": {"value": 0}, "id": 1}, "status_code": 200},
                     {"json": {"jsonrpc": "2.0", "result": {"value": []}, "id": 1}, "status_code": 200},
                 ],
@@ -218,7 +218,7 @@ class TestSplTokenStatus:
         m.post(
             url,
             [
-                {"json": {"jsonrpc": "2.0", "result": {"epoch": "3"}, "id": 1}, "status_code": 200},
+                {"json": {"jsonrpc": "2.0", "result": "ok", "id": 1}, "status_code": 200},
                 {"json": {"jsonrpc": "2.0", "result": {"value": balance}, "id": 1}, "status_code": 200},
                 {"json": token_payload, "status_code": 200},
             ],
@@ -264,7 +264,7 @@ class TestSplTokenStatus:
             m.post(
                 "https://rpc.example.com",
                 [
-                    {"json": {"jsonrpc": "2.0", "result": {"epoch": "3"}, "id": 1}, "status_code": 200},
+                    {"json": {"jsonrpc": "2.0", "result": "ok", "id": 1}, "status_code": 200},
                     {"json": {"jsonrpc": "2.0", "result": {"value": 1000000000}, "id": 1}, "status_code": 200},
                     {
                         "json": {

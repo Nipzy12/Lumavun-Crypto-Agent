@@ -39,7 +39,7 @@ from state import (
     save_state_locally,
     was_notified,
 )
-from telegram import build_messages, send_messages
+from telegram import send_messages, build_daily_summary, build_opportunity_block, chunk_message
 from wallet import read_wallet
 
 # Reports contain Indonesian text and status symbols. Force UTF-8 so a
@@ -56,7 +56,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-AGENT_VERSION = "1.3"
+AGENT_VERSION = "1.3.1"
 
 
 def _env_list(name: str) -> List[str]:
@@ -85,6 +85,9 @@ def campaign_payload(campaign: Campaign) -> Dict[str, Any]:
         "reward_text": campaign.reward_text,
         "reward_note": campaign.reward_note,
         "zero_capital_ok": campaign.zero_capital_ok,
+        "cost_status": campaign.cost_status,
+        "evidence_verified": campaign.evidence_verified,
+        "source_verification_status": campaign.source_verification_status,
         "zero_capital_reason": campaign.zero_capital_reason,
         "risk_flags": list(campaign.risk_flags),
         "risk_score": campaign.risk_score,
@@ -132,11 +135,12 @@ def main() -> int:
         stale_days=int(config.get("dedup", {}).get("stale_days", 7)),
     )
 
-    # Only notify what is new AND has never been sent. State survives runs.
+    # Retry eligible unsent opportunities even when they have already been seen.
     to_notify = [
         campaign
-        for campaign in new_campaigns
-        if not was_notified(state, campaign.campaign_id)
+        for campaign in {c.campaign_id: c for c in campaigns}.values()
+        if campaign.evidence_verified and campaign.zero_capital_ok is True
+        and not was_notified(state, campaign.campaign_id)
     ]
     logger.info(
         "Dedup: %d new, %d duplicates skipped, %d to notify",
@@ -161,42 +165,35 @@ def main() -> int:
                 "key (Base58, 32 bytes). SOL balance cannot be read."
             )
 
-    payloads = [campaign_payload(campaign) for campaign in to_notify]
-    messages = build_messages(
-        scan_time=scan_time,
-        wallet_summary=wallet,
-        campaigns=payloads,
-        source_health=source_health,
-        errors=errors,
-        total_found=total_found,
-        duplicates_skipped=len(duplicates_skipped),
-    )
-
     telegram_result: Optional[Dict[str, Any]] = None
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
     if bot_token and chat_id:
-        telegram_result = send_messages(bot_token, chat_id, messages)
-        if not telegram_result.get("sent"):
-            logger.warning(
-                "Telegram delivery incomplete: %s", telegram_result.get("error")
-            )
+        batches = []
+        summary_id = "summary:" + scan_time[:10]
+        if not was_notified(state, summary_id):
+            batches.append((summary_id, [build_daily_summary(
+                scan_time, wallet, [campaign_payload(c) for c in campaigns],
+                source_health, errors, total_found, len(duplicates_skipped)
+            )]))
+        for campaign in to_notify:
+            batches.append((campaign.campaign_id, chunk_message(build_opportunity_block(campaign_payload(campaign), 1))))
+        telegram_result = {"sent": True, "messages": 0, "sent_count": 0, "error": None}
+        delivery_errors = []
+        for ident, batch in batches:
+            result = send_messages(bot_token, chat_id, batch)
+            telegram_result["messages"] += result["messages"]
+            telegram_result["sent_count"] += result["sent_count"]
+            if result.get("sent"):
+                record_notification(state, ident)
+                save_state_locally(state)
+            else:
+                telegram_result["sent"] = False
+                delivery_errors.append(str(result.get("error") or "Delivery failed"))
+        telegram_result["error"] = "; ".join(delivery_errors) or None
     else:
         logger.info("Telegram not configured; printing the summary only")
-        print(messages[0] if messages else "No summary generated")
-        telegram_result = None
-
-    # Record notification history only when delivery actually happened, so a
-    # failed send is retried on the next run instead of being lost.
-    delivered = telegram_result is None or bool(telegram_result.get("sent"))
-    if delivered:
-        for campaign in to_notify:
-            record_notification(
-                state,
-                campaign.campaign_id,
-                opportunity_type=campaign.opportunity_type,
-                title=campaign.title[:80],
-            )
+        print(build_daily_summary(scan_time, wallet, [campaign_payload(c) for c in campaigns], source_health, errors, total_found, len(duplicates_skipped)))
 
     mark_run(state)
     save_state_locally(state)
