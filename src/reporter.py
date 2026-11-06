@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from discovery import Campaign, SourceHealth
 
-AGENT_VERSION = "1.4.1"
+AGENT_VERSION = "1.4.2"
 OPPORTUNITY_TYPES = (
     "CONFIRMED_AIRDROP",
     "POINTS_PROGRAM",
@@ -359,6 +359,10 @@ def write_markdown_report(report: Dict[str, Any], path: Optional[Path] = None) -
     for quest in (report.get("quest_queue") or {}).values():
         lines.append(f"- **{quest['name']}** — {quest['status']} | biaya {quest['cost_status']} | eligibility {quest['eligibility_status']}")
         lines.append(f"  - {quest.get('official_url') or 'URL resmi belum terverifikasi'} | deadline {quest.get('end_at') or 'tidak disebutkan'}")
+        qualification = quest.get("qualification", {})
+        lines.append(f"  - Qualification: {qualification.get('status', 'REVIEW_REQUIRED')} | score {qualification.get('score', 0)} | reward {qualification.get('reward_class', 'UNKNOWN_REWARD')}")
+        for name, evidence in qualification.get("fields", {}).items():
+            lines.append(f"    - {name}: {evidence['status']} — {evidence['explanation']} | {evidence['evidence_url']} | checked {evidence['last_verified_at']}")
         for task in quest.get("tasks", {}).values():
             lines.append(f"  - [{task['status']}] {task['text']}")
     lines.extend(["", "## Integrasi quest", ""])

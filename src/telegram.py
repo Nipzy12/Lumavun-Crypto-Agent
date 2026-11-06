@@ -264,6 +264,10 @@ def build_opportunity_block(campaign: Dict[str, Any], index: int) -> str:
 
     lines: List[str] = [heading]
     if quest:
+        qualification = quest.get("qualification", {})
+        if qualification:
+            lines.append(f"   Kualifikasi: {qualification['status']} | skor bukti {qualification['score']} | {qualification['reward_class']}")
+            lines.append("   Kelas reward bukan bukti penerimaan atau jaminan penghasilan.")
         lines.append("   Status tugas: " + quest.get("status", "DISCOVERED"))
         lines.append("   Hadiah dijamin: " + ("tidak" if quest.get("reward_guaranteed") is False else "belum terverifikasi"))
     lines.append(f"   Proyek: {project or chr(45)}")
@@ -358,9 +362,19 @@ def build_daily_summary(
     total = total_found if total_found is not None else new_count
 
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.4.1 - ringkasan harian")
+    lines.append("LUMAVUN Crypto Agent V1.4.2 - ringkasan harian")
     lines.append(f"Scan: {scan_time}")
     if quest_summary is not None:
+        groups = quest_summary.get("shortlist")
+        if groups is not None:
+            for key, label in (("ACTIONABLE", "Actionable terverifikasi"), ("REVIEW_REQUIRED", "Perlu bukti"), ("BLOCKED", "Diblokir"), ("EXPIRED", "Kedaluwarsa"), ("EDUCATIONAL", "Pendidikan — bukan penghasilan")):
+                rows = groups.get(key, [])
+                lines.append(f"{label}: {len(rows)}")
+                for row in rows[:1]:
+                    missing = ', '.join((row['failed'] + row['missing'])[:3]) or 'Tidak ada bukti wajib yang kurang; tindakan sensitif tetap perlu approval'
+                    lines.append(f"  {row['name'][:80]} | {row['status']} | skor {row['score']} | {row['reward_class']}")
+                    official_link = row['official_url'] if row['official_url'] and len(row['official_url']) <= 240 else 'Lihat URL lengkap di review CLI/artifact' if row['official_url'] else 'URL resmi belum terverifikasi'
+                    lines.append(f"  {official_link} | bukti: {missing}")
         stats = quest_summary.get("discovery_statistics")
         if stats is not None:
             lines.append(f"Artikel dipindai: {stats['articles_scanned']} | berita ditolak: {stats['news_rejected']} | kandidat quest: {stats['quest_candidates']}")
@@ -434,7 +448,15 @@ def build_daily_summary(
         "Semua peluang wajib diverifikasi manual. Tidak ada klaim otomatis, "
         "tanda tangan transaksi, atau setoran."
     )
-    return "\n".join(lines)
+    result = "\n".join(lines)
+    if len(result.encode("utf-8")) > 3800:
+        kept = []
+        for line in lines:
+            if len(("\n".join(kept + [line])).encode("utf-8")) > 3650:
+                break
+            kept.append(line)
+        result = "\n".join(kept + ["Detail lengkap: review CLI/artifact. Kelas reward bukan bukti penghasilan."])
+    return result
 
 
 def chunk_message(text: str, max_bytes: int = CHUNK_TARGET_BYTES) -> List[str]:

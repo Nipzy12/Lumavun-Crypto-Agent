@@ -1,8 +1,23 @@
-# LUMAVUN Autonomous Crypto Agent V1.4.1
+# LUMAVUN Autonomous Crypto Agent V1.4.2
 
 A zero-capital airdrop intelligence system: it reads a registry of verified sources (RSS/Atom feeds and public JSON APIs), extracts campaigns with their evidence, classifies the opportunity, applies a zero-capital filter, scores explainable risk indicators, and sends actionable Telegram notifications. It also monitors a Phantom wallet's SOL and SPL balances read-only.
 
 **No guaranteed earnings. No automatic claiming, wallet signing, transactions, or trades.** Every report states this in plain words.
+
+## V1.4.2 — Opportunity qualification and evidence
+
+Every candidate now has independent PASS/FAIL/UNKNOWN evidence fields, source URLs, explanations and observation timestamps. Qualification is **ACTIONABLE**, **REVIEW_REQUIRED**, **BLOCKED** or **EXPIRED**, separately from existing task progress. A deterministic 0–100 evidence score orders review; it never overrides a mandatory gate or predicts income. Missing dates, fees, reward terms or eligibility remain UNKNOWN.
+
+Reward classes explicitly separate confirmed/conditional token programs, points, educational badges, speculative airdrops and unknown rewards. Program classification is not proof of payment. Confirmed received rewards still require transaction evidence and reviewed attribution.
+
+```bash
+python scripts/quest_queue.py review --quest QUEST_ID
+python scripts/quest_queue.py review --quest QUEST_ID --decision defer --evidence 'Official announcement omits gas costs' --reason 'Await explicit fee terms' --reviewer operator
+```
+
+Review output includes field-level evidence and append-only decision history. Acceptance never turns unknown facts into PASS. Telegram adds a compact shortlist separating actionable, missing-evidence, blocked, expired and educational campaigns; the existing daily dedup key is preserved. State migration is additive and idempotent, retaining IDs, task history, approvals and reward records. No new credentials or dependency changes.
+
+See [qualification rules, scoring weights and migration details](docs/qualification-v142.md).
 
 ## V1.4.1 — Discovery diagnostics and source quality
 

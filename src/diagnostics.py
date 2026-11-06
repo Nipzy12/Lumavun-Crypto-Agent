@@ -85,8 +85,11 @@ def candidate_reasons(record: dict, *, duplicate: bool = False, now: datetime | 
 
 
 def review_row(record: dict, *, duplicate: bool = False, now: datetime | None = None) -> dict:
+    from qualification import qualify
+    qualification = qualify(record, now)
     reasons = candidate_reasons(record, duplicate=duplicate, now=now)
     return {
+        "qualification": qualification, "review_history": record.get("review_history", []),
         "id": record["id"], "name": record.get("name", ""), "project": record.get("project", ""),
         "source_url": record.get("source", ""), "announcement_url": record.get("announcement_url", ""),
         "official_url": record.get("official_url", ""), "evidence": record.get("evidence", []),
@@ -120,12 +123,15 @@ def discovery_report(observations: list[dict], source_health: list, queue: dict,
         "quest_candidates": len(candidates),
         "officially_verified": sum(q.get("evidence_verified") is True for q in candidates.values()),
         "zero_capital_pass": sum(q.get("cost_status") == "PASS" for q in candidates.values()),
-        "actionable_quests": sum(q.get("status") in ("READY", "NEEDS_APPROVAL") for q in candidates.values()),
+        "actionable_quests": sum(q.get("qualification", {}).get("status") == "ACTIONABLE" and q.get("status") in ("READY", "NEEDS_APPROVAL") for q in candidates.values()),
         "awaiting_approval": sum(q.get("status") == "NEEDS_APPROVAL" or (q.get("human_review") or {}).get("decision") == "defer" for q in candidates.values()),
         "completed_tasks": sum(t.get("completion") is not None for q in queue.values() for t in q.get("tasks", {}).values()),
         "confirmed_rewards": len(rewards.get("actual_rewards_received", [])),
         "duplicate_observations": sum(any(r["code"] == "DUPLICATE" for r in row["reasons"]) for row in rows),
         "sources_unreachable": len(failures),
     }
+    from qualification import qualify
+    stats["qualification_counts"] = {status: sum(qualify(q, now)["status"] == status for q in candidates.values())
+                                      for status in ("ACTIONABLE", "REVIEW_REQUIRED", "BLOCKED", "EXPIRED")}
     return {"statistics": stats, "candidates": rows, "source_failures": failures,
             "scope": "Articles are feed entries actually examined before the report cap; candidates/verified/PASS/actionable are distinct non-NEWS_ONLY canonical IDs observed this scan. Completed tasks and confirmed reward receipts are cumulative."}

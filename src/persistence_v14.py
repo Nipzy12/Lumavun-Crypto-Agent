@@ -13,6 +13,7 @@ QUEST_FIELDS = {
     'cost_status', 'cost_evidence', 'eligibility_restrictions', 'eligibility_status',
     'eligibility_evidence', 'risk_indicators', 'risk_explanation', 'risk_band', 'campaign_type',
     'announcement_url', 'evidence_checks', 'reasons', 'human_review',
+    'qualification', 'qualification_schema', 'review_history', 'eligibility_text', 'task_archive',
     'platform_status', 'status', 'verified_at', 'first_seen', 'updated_at', 'last_observed', 'terms_hash',
 }
 TASK_FIELDS = {'id', 'text', 'approval_reasons', 'status', 'approval', 'completion'}
@@ -50,12 +51,18 @@ def clean_queue(value):
         clean.setdefault('updated_at', '')
         clean.setdefault('reward_type', 'UNSPECIFIED')
         clean.setdefault('reward_status', 'unspecified')
+        if not isinstance(clean.get('evidence_checks'), dict):
+            clean['evidence_checks'] = {}
         clean['evidence_verified'] = record.get('evidence_verified') is True
         tasks = {}
         for tid, task in record['tasks'].items():
-            if not isinstance(tid, str) or not isinstance(task, dict) or task.get('id') != tid or not isinstance(task.get('text'), str) or not isinstance(task.get('approval_reasons'), list):
+            if not isinstance(tid, str) or not isinstance(task, dict) or task.get('id') != tid or not isinstance(task.get('text'), str):
                 continue
             entry = {k: _json(v) for k, v in task.items() if k in TASK_FIELDS}
+            from quests import task_policy
+            if not isinstance(entry.get('approval_reasons'), list):
+                entry['approval_reasons'] = task_policy(task['text'])
+            entry.setdefault('status', 'DISCOVERED')
             entry['approval'] = _proof(task.get('approval'), 'human_approval')
             entry['completion'] = _proof(task.get('completion'), 'human_confirmation')
             tasks[tid] = entry
@@ -63,6 +70,13 @@ def clean_queue(value):
         proof = _proof(review, 'human_review')
         clean['human_review'] = ({**proof, 'decision': review['decision']}
                                  if proof and review.get('decision') in ('accept', 'reject', 'defer') else None)
+        from qualification import migrate_record, history_union
+        # History is merged separately, without the generic list truncation.
+        if 'review_history' in record:
+            clean['review_history'] = history_union(record.get('review_history'))
+        if not isinstance(clean.get('task_archive'), dict):
+            clean['task_archive'] = {}
+        migrate_record(clean)
         clean['tasks'] = tasks
         result[ident] = clean
     return result
@@ -103,6 +117,10 @@ def merge_extensions(base, update):
             continue
         winner, other = (record, old) if record['updated_at'] >= old['updated_at'] else (old, record)
         winner = deepcopy(winner)
+        from qualification import history_union
+        winner['review_history'] = history_union(winner.get('review_history'), other.get('review_history'))
+        winner['task_archive'] = {**(other.get('task_archive') or {}), **(winner.get('task_archive') or {}),
+                                  **{k:v for k,v in other['tasks'].items() if k not in winner['tasks']}}
         if winner.get('terms_hash') == other.get('terms_hash'):
             reviews = [r for r in (winner.get('human_review'), other.get('human_review')) if r]
             if reviews:

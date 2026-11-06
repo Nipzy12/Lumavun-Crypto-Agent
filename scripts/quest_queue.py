@@ -15,6 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['list', 'review', 'approve', 'complete'])
     parser.add_argument('--decision', choices=['accept', 'reject', 'defer'], help='Explicit candidate review; never overrides missing facts or approves a task')
+    parser.add_argument('--reason', default='', help='Reason for the review decision')
+    parser.add_argument('--reviewer', default='operator', help='Reviewer identifier, no personal information required')
     parser.add_argument('--quest')
     parser.add_argument('--task')
     parser.add_argument('--evidence', help='Human decision/completion note, never private information or secrets')
@@ -31,7 +33,7 @@ def main():
             if not args.quest or not args.evidence:
                 parser.error('--quest and --evidence are required for a review decision')
             try:
-                review_candidate(state, args.quest, args.decision, args.evidence)
+                review_candidate(state, args.quest, args.decision, args.evidence, reason=args.reason, reviewer=args.reviewer)
             except (KeyError, ValueError) as exc:
                 parser.error(str(exc))
             save_state_locally(state)

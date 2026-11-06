@@ -78,6 +78,8 @@ def from_campaign(campaign, text: str = "", metadata: dict | None = None) -> dic
     guaranteed = None
     if re.search(r"\b(?:not guaranteed|no guaranteed|raffle|lottery|chance to win)\b", text, re.I):
         guaranteed = False
+    elif re.search(r"\b(?:guaranteed token rewards?|token rewards? (?:are|is) guaranteed)\b", text, re.I):
+        guaranteed = True
     record = {
         "id": campaign.campaign_id, "project": campaign.project, "name": campaign.title,
         "official_url": campaign.official_url, "source": campaign.source,
@@ -95,6 +97,7 @@ def from_campaign(campaign, text: str = "", metadata: dict | None = None) -> dic
         "networks": networks, "wallet_requirements": wallet_requirements,
         "mandatory_fees": campaign.zero_capital_blockers, "cost_status": campaign.cost_status,
         "cost_evidence": campaign.zero_capital_reason, "eligibility_restrictions": eligibility,
+        "eligibility_text": text[:6000],
         "eligibility_status": "PASS" if open_eligibility else "UNKNOWN",
         "eligibility_evidence": "Explicit unrestricted eligibility" if open_eligibility else "Not checked",
         "risk_indicators": campaign.risk_flags, "risk_explanation": campaign.risk_explanation,
@@ -140,6 +143,9 @@ def _status(record: dict, now: datetime) -> str:
 
 
 def refresh_status(record: dict, now: datetime) -> None:
+    from qualification import qualify, migrate_record
+    migrate_record(record)
+    record["qualification"] = qualify(record, now)
     record["status"] = _status(record, now)
     from diagnostics import candidate_reasons
     record["reasons"] = candidate_reasons(record, now=now)
@@ -162,6 +168,9 @@ def update_queue(state: dict, quests: list[dict], now: datetime | None = None) -
         if incoming["campaign_type"] == "NEWS_ONLY":
             continue
         old = queue.get(incoming["id"], {})
+        from qualification import history_union
+        incoming["review_history"] = history_union(old.get("review_history"), incoming.get("review_history"))
+        incoming["task_archive"] = {**(old.get("task_archive") or {}), **{k:v for k,v in old.get("tasks", {}).items() if k not in incoming["tasks"]}}
         incoming["first_seen"] = old.get("first_seen", now.isoformat())
         incoming["verified_at"] = old.get("verified_at") or (now.isoformat() if incoming["evidence_verified"] else None)
         incoming["updated_at"] = now.isoformat()
@@ -192,7 +201,7 @@ def record_task_action(state: dict, quest_id: str, task_id: str, action: str, ev
     record = state["quest_queue"][quest_id]
     refresh_status(record, now)
     task = record["tasks"][task_id]
-    if record["status"] not in ("READY", "NEEDS_APPROVAL"):
+    if record["status"] not in ("READY", "NEEDS_APPROVAL") or record["qualification"]["status"] != "ACTIONABLE":
         raise ValueError("Quest is not eligible for task action")
     if not evidence.strip() or re.fullmatch(r"https?://\S+", evidence.strip()):
         raise ValueError("A URL alone is not evidence of approval or completion")
@@ -224,7 +233,7 @@ def queue_digest(queue: dict, observed_ids: set[str] | None = None) -> dict:
 
 
 def review_candidate(state: dict, quest_id: str, decision: str, evidence: str,
-                     now: datetime | None = None) -> None:
+                     now: datetime | None = None, *, reason: str = "", reviewer: str = "operator") -> None:
     """Explicit candidate review never supplies missing facts or task consent."""
     from copy import deepcopy
     now = now or datetime.now(timezone.utc)
@@ -236,8 +245,17 @@ def review_candidate(state: dict, quest_id: str, decision: str, evidence: str,
     trial = deepcopy(record)
     trial.pop("human_review", None)
     refresh_status(trial, now)
-    if decision == "accept" and trial["status"] not in ("READY", "NEEDS_APPROVAL", "COMPLETED"):
+    if decision == "accept" and (trial["status"] not in ("READY", "NEEDS_APPROVAL", "COMPLETED") or trial["qualification"]["status"] != "ACTIONABLE"):
         raise ValueError("Cannot accept: evidence, PASS costs, eligibility and freshness must already pass; UNKNOWN is never approved")
+    from qualification import qualify, history_union
+    previous_status = qualify(record, now)["status"]
+    record.setdefault("review_history", [])
     record["human_review"] = {"kind": "human_review", "decision": decision, "at": now.isoformat(), "evidence": evidence[:500]}
     record["updated_at"] = now.isoformat()
     refresh_status(record, now)
+
+    import uuid
+    entry = {"id": uuid.uuid4().hex, "decision": decision, "evidence": evidence[:500],
+             "reviewer": reviewer[:100], "reason": (reason or evidence)[:500], "at": now.isoformat(),
+             "previous_status": previous_status, "new_status": record["qualification"]["status"]}
+    record["review_history"] = history_union(record.get("review_history"), [entry])

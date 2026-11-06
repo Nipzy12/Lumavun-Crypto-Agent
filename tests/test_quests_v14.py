@@ -176,7 +176,7 @@ def test_queue_cli_records_only_decision(tmp_path, monkeypatch):
     state = default_state()
     q = quest()
     # Use current time, with a future deadline, for the actual CLI check.
-    q['start_at'] = None
+    q['start_at'] = '2020-01-01'
     q['end_at'] = '2099-12-01'
     update_queue(state, [q])
     save_state_locally(state)

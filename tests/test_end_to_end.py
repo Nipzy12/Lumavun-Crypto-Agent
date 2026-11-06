@@ -96,7 +96,7 @@ FEED_BODIES = {
   <title>Arbitrum announces Airdrop campaign</title>
   <link>https://blog.arbitrum.io/incentive</link>
   <pubDate>Thu, 15 Oct 2026 13:43:20 GMT</pubDate>
-  <description>Arbitrum announces an airdrop campaign with confirmed distribution. Follow the account and register to receive 100 tokens. Participation is free. Open to everyone. Deadline 2026-12-01.</description>
+  <description>Arbitrum announces an airdrop campaign with confirmed distribution. Follow the account and register to receive 100 tokens. Participation is free. Open to everyone. Starts on 2026-01-01. Deadline 2026-12-01. Rewards are not guaranteed.</description>
 </item>
 </channel></rss>""",
 }

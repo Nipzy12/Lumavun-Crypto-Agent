@@ -60,7 +60,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-AGENT_VERSION = "1.4.1"
+AGENT_VERSION = "1.4.2"
 
 
 def _env_list(name: str) -> List[str]:
@@ -162,6 +162,7 @@ def main() -> int:
         for campaign in {c.campaign_id: c for c in campaigns}.values()
         if campaign.evidence_verified and campaign.zero_capital_ok is True
         and queue.get(campaign.campaign_id, {}).get("status") in ("READY", "NEEDS_APPROVAL")
+        and queue.get(campaign.campaign_id, {}).get("qualification", {}).get("status") == "ACTIONABLE"
         and not was_notified(state, campaign.campaign_id)
     ]
     logger.info(
@@ -191,6 +192,8 @@ def main() -> int:
     errors.extend(reward_tracking.get("errors", []) if wallet.get("address_valid") else [])
 
     discovery_diagnostics = discovery_report(observed_quests, source_health, queue, previous_ids, reward_tracking)
+    from qualification import shortlist
+    quest_summary["shortlist"] = shortlist({k:v for k,v in queue.items() if k in {q["id"] for q in observed_quests}})
     quest_summary["discovery_statistics"] = discovery_diagnostics["statistics"]
 
     telegram_result: Optional[Dict[str, Any]] = None

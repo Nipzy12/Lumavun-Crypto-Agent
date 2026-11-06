@@ -1,4 +1,4 @@
-name: LUMAVUN Crypto Agent V1.4.1
+name: LUMAVUN Crypto Agent V1.4.2
 on:
   workflow_dispatch:
     inputs:

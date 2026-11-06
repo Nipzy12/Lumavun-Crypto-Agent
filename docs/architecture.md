@@ -1,4 +1,4 @@
-# LUMAVUN V1.4.1 architecture
+# LUMAVUN V1.4.2 architecture
 
 ## Data flow
 
@@ -94,3 +94,9 @@ Bankless Academy uses a named public JSON parser in `sources.py`. Only the docum
 `quests.review_candidate` records accept/reject/defer with a substantive human note, timestamp and terms-scoped persistence. Accept runs the normal eligibility gates and cannot grant task consent. `persistence_v14.py` validates review proofs and preserves the latest review when merging unchanged terms. Read-only CLI listing never writes or quarantines the artifact, including malformed JSON; normal scans retain existing corruption recovery.
 
 Daily diagnostics use the existing persisted summary notification key. Source failures, news rejections, official evidence, cost PASS and actual receipts have separate counters. The legacy capped campaign list remains available for compatibility; consumers wanting complete scan decisions should use `discovery_diagnostics`. Historical completed tasks and confirmed reward receipts are explicitly cumulative rather than daily earnings.
+
+## V1.4.2 qualification layer
+
+`qualification.py` sits between quest extraction and alert/action decisions. `refresh_status` recalculates qualification separately from legacy task lifecycle state. `main.py` gates alerts on ACTIONABLE and includes a deterministic grouped shortlist; diagnostics expose current-scan counts by qualification status. `reporter.py` includes all field evidence in the existing artifacts.
+
+`review_candidate` records append-only events without changing source facts. `persistence_v14.py` migrates additive fields, unions histories across merges, preserves valid task proofs when optional metadata is malformed and archives tasks removed from source observations. The existing state envelope, daily notification keys and wallet attribution mechanism are retained. See [qualification specification](qualification-v142.md) for exact weights, gating semantics and compatibility limits.
