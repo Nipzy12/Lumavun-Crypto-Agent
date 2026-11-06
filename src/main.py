@@ -60,7 +60,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-AGENT_VERSION = "1.4.2"
+AGENT_VERSION = "1.4.3"
 
 
 def _env_list(name: str) -> List[str]:
@@ -144,7 +144,11 @@ def main() -> int:
         previous = unique_quests.get(record["id"])
         if previous is None or record["evidence_verified"] or not previous["evidence_verified"]:
             unique_quests[record["id"]] = record
+    from qualification import qualify
+    prior_qualifications = {k:qualify(v) for k,v in state.get("quest_queue", {}).items()}
     queue = update_queue(state, list(unique_quests.values()))
+    from recovery import revalidate, recovery_report
+    revalidate(state, specs, config, observations=list(unique_quests.values()), prior_qualifications=prior_qualifications)
     quest_summary = queue_digest(queue, {q["id"] for q in observed_quests})
     state_source = os.getenv("LUMAVUN_STATE_SOURCE", "").strip() or "local"
     total_found = len(campaigns)
@@ -191,6 +195,10 @@ def main() -> int:
     reward_tracking = update_rewards(state, wallet, os.getenv("PHANTOM_PUBLIC_ADDRESS", "").strip(), config=quest_settings.get("reward_tracking", {}))
     errors.extend(reward_tracking.get("errors", []) if wallet.get("address_valid") else [])
 
+    recovery = recovery_report(queue, reward_tracking)
+    from pathlib import Path
+    import json
+    Path("opportunity_recovery.json").write_text(json.dumps(recovery, indent=2, ensure_ascii=False), encoding="utf-8")
     discovery_diagnostics = discovery_report(observed_quests, source_health, queue, previous_ids, reward_tracking)
     from qualification import shortlist
     quest_summary["shortlist"] = shortlist({k:v for k,v in queue.items() if k in {q["id"] for q in observed_quests}})
@@ -240,7 +248,7 @@ def main() -> int:
         total_found=total_found,
         state_source=state_source,
         quest_queue=queue, adapter_health=adapter_health, reward_tracking=reward_tracking,
-        discovery_diagnostics=discovery_diagnostics,
+        discovery_diagnostics=discovery_diagnostics, recovery_report=recovery,
     )
     json_path = write_json_report(report)
     md_path = write_markdown_report(report)

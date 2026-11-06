@@ -1,4 +1,4 @@
-name: LUMAVUN Crypto Agent V1.4.2
+name: LUMAVUN Crypto Agent V1.4.3
 on:
   workflow_dispatch:
     inputs:
@@ -131,6 +131,7 @@ jobs:
           path: |
             latest_report.json
             latest_report.md
+            opportunity_recovery.json
           retention-days: 7
           if-no-files-found: warn
           overwrite: true

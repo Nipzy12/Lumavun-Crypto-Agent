@@ -108,7 +108,7 @@ def from_campaign(campaign, text: str = "", metadata: dict | None = None) -> dic
         "eligibility_evidence": "Explicit unrestricted eligibility" if open_eligibility else "Not checked",
         "risk_indicators": campaign.risk_flags, "risk_explanation": campaign.risk_explanation,
         "risk_band": campaign.risk_band, "campaign_type": campaign.opportunity_type,
-        "platform_status": "", "status": "DISCOVERED",
+        "platform_status": "Deleted" if re.search(r"\b(?:campaign|quest) (?:is |has been )?(?:withdrawn|cancelled|canceled|closed)\b", text, re.I) else "", "status": "DISCOVERED",
     }
     for key in ("start_at", "end_at", "networks", "eligibility_status", "eligibility_evidence", "platform_status"):
         if key in metadata:
@@ -171,19 +171,35 @@ def update_queue(state: dict, quests: list[dict], now: datetime | None = None) -
     queue = state.setdefault("quest_queue", {})
     for incoming in quests:
         # Keep ordinary news out of the persistent task queue; reports count it.
-        if incoming["campaign_type"] == "NEWS_ONLY":
+        if incoming["campaign_type"] == "NEWS_ONLY" and incoming["id"] not in queue:
             continue
         old = queue.get(incoming["id"], {})
         from qualification import history_union
         incoming["review_history"] = history_union(old.get("review_history"), incoming.get("review_history"))
         incoming["task_archive"] = {**(old.get("task_archive") or {}), **{k:v for k,v in old.get("tasks", {}).items() if k not in incoming["tasks"]}}
+        from recovery import terms, terms_data, union_events
+        incoming["evidence_requests"] = union_events(old.get("evidence_requests"), incoming.get("evidence_requests"))
+        incoming["evidence_resolution"] = old.get("evidence_resolution", {})
+        incoming["terms_events"] = union_events(old.get("terms_events"))
+        incoming["terms_digest"] = terms(incoming)
+        changed = bool(old and terms(old) != incoming["terms_digest"])
+        incoming["terms_review_required"] = bool(old.get("terms_review_required") or changed)
+        if changed:
+            event = {"id": hashlib.sha256((incoming["id"] + now.isoformat() + incoming["terms_digest"]).encode()).hexdigest(),
+                     "at": now.isoformat(), "before": terms(old), "after": incoming["terms_digest"],
+                     "source_url": incoming.get("announcement_url"), "kind": "TERMS_CHANGED",
+                     "previous_terms": terms_data(old), "current_terms": terms_data(incoming),
+                     "previous_task_proofs": old.get("tasks", {})}
+            incoming["terms_events"] = union_events(incoming["terms_events"], [event])
         incoming["first_seen"] = old.get("first_seen", now.isoformat())
         incoming["verified_at"] = old.get("verified_at") or (now.isoformat() if incoming["evidence_verified"] else None)
         incoming["updated_at"] = now.isoformat()
         incoming["last_observed"] = now.isoformat()
         # Consent applies to the exact quest terms, not just an unchanged verb.
-        terms = repr([incoming.get(k) for k in ("official_url", "cost_status", "eligibility_restrictions", "end_at", "risk_indicators")])
-        incoming["terms_hash"] = hashlib.sha256(terms.encode()).hexdigest()
+        terms_material = repr([incoming.get(k) for k in ("official_url", "cost_status", "eligibility_restrictions", "end_at", "risk_indicators")])
+        incoming["terms_hash"] = hashlib.sha256(terms_material.encode()).hexdigest()
+        if old:
+            incoming["terms_hash"] = incoming["terms_digest"] if changed else old.get("terms_hash", incoming["terms_hash"])
         if old.get("terms_hash") == incoming["terms_hash"]:
             incoming["human_review"] = old.get("human_review")
         for ident, task in incoming["tasks"].items():
@@ -250,11 +266,14 @@ def review_candidate(state: dict, quest_id: str, decision: str, evidence: str,
     record = state["quest_queue"][quest_id]
     trial = deepcopy(record)
     trial.pop("human_review", None)
+    trial.pop("terms_review_required", None)
     refresh_status(trial, now)
     if decision == "accept" and (trial["status"] not in ("READY", "NEEDS_APPROVAL", "COMPLETED") or trial["qualification"]["status"] != "ACTIONABLE"):
         raise ValueError("Cannot accept: evidence, PASS costs, eligibility and freshness must already pass; UNKNOWN is never approved")
     from qualification import qualify, history_union
     previous_status = qualify(record, now)["status"]
+    if decision == "accept":
+        record["terms_review_required"] = False
     record.setdefault("review_history", [])
     record["human_review"] = {"kind": "human_review", "decision": decision, "at": now.isoformat(), "evidence": evidence[:500]}
     record["updated_at"] = now.isoformat()

@@ -86,9 +86,13 @@ def candidate_reasons(record: dict, *, duplicate: bool = False, now: datetime | 
 
 def review_row(record: dict, *, duplicate: bool = False, now: datetime | None = None) -> dict:
     from qualification import qualify
+    from recovery import gap_analysis
     qualification = qualify(record, now)
     reasons = candidate_reasons(record, duplicate=duplicate, now=now)
     return {
+        "evidence_gap": gap_analysis(record, now),
+        "evidence_requests": record.get("evidence_requests", []), "evidence_resolution": record.get("evidence_resolution", {}),
+        "terms_events": record.get("terms_events", []),
         "qualification": qualification, "review_history": record.get("review_history", []),
         "id": record["id"], "name": record.get("name", ""), "project": record.get("project", ""),
         "source_url": record.get("source", ""), "announcement_url": record.get("announcement_url", ""),

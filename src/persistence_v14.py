@@ -13,6 +13,7 @@ QUEST_FIELDS = {
     'cost_status', 'cost_evidence', 'eligibility_restrictions', 'eligibility_status',
     'eligibility_evidence', 'risk_indicators', 'risk_explanation', 'risk_band', 'campaign_type',
     'announcement_url', 'evidence_checks', 'reasons', 'human_review',
+    'evidence_requests', 'evidence_resolution', 'terms_digest', 'terms_review_required', 'terms_events',
     'qualification', 'qualification_schema', 'review_history', 'eligibility_text', 'task_archive', 'gas_status', 'gas_evidence',
     'platform_status', 'status', 'verified_at', 'first_seen', 'updated_at', 'last_observed', 'terms_hash',
 }
@@ -76,6 +77,15 @@ def clean_queue(value):
             clean['review_history'] = history_union(record.get('review_history'))
         if not isinstance(clean.get('task_archive'), dict):
             clean['task_archive'] = {}
+        from recovery import union_events
+        for key in ('evidence_requests', 'terms_events'):
+            clean[key] = union_events(record.get(key))
+        clean['evidence_requests'] = [e for e in clean['evidence_requests'] if isinstance(e.get('url'), str) and e.get('status') in ('PENDING','CHECKED','UNSUPPORTED')]
+        if not isinstance(clean.get('evidence_resolution'), dict):
+            clean['evidence_resolution'] = {}
+        resolution = clean['evidence_resolution']
+        if not isinstance(resolution.get('failures', 0), int):
+            resolution['failures'] = 0
         migrate_record(clean)
         clean['tasks'] = tasks
         result[ident] = clean
@@ -117,6 +127,11 @@ def merge_extensions(base, update):
             continue
         winner, other = (record, old) if record['updated_at'] >= old['updated_at'] else (old, record)
         winner = deepcopy(winner)
+        from recovery import union_events
+        for key in ('evidence_requests', 'terms_events'):
+            winner[key] = union_events(winner.get(key), other.get(key))
+        resolutions = [r for r in (winner.get('evidence_resolution'), other.get('evidence_resolution')) if isinstance(r, dict) and r]
+        winner['evidence_resolution'] = max(resolutions, key=lambda r: str(r.get('updated_at', ''))) if resolutions else {}
         from qualification import history_union
         winner['review_history'] = history_union(winner.get('review_history'), other.get('review_history'))
         winner['task_archive'] = {**(other.get('task_archive') or {}), **(winner.get('task_archive') or {}),

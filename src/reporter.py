@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from discovery import Campaign, SourceHealth
 
-AGENT_VERSION = "1.4.2"
+AGENT_VERSION = "1.4.3"
 OPPORTUNITY_TYPES = (
     "CONFIRMED_AIRDROP",
     "POINTS_PROGRAM",
@@ -84,6 +84,7 @@ def build_report(
     quest_queue: Optional[Dict[str, Any]] = None,
     adapter_health: Optional[List[Dict[str, Any]]] = None,
     reward_tracking: Optional[Dict[str, Any]] = None,
+    recovery_report: Optional[Dict[str, Any]] = None,
     discovery_diagnostics: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the machine-readable report dict."""
@@ -94,6 +95,7 @@ def build_report(
         "discovery_diagnostics": discovery_diagnostics or {},
         "quest_adapters": adapter_health or [],
         "reward_tracking": reward_tracking or {},
+        "opportunity_recovery": recovery_report or {},
         "version": AGENT_VERSION,
         "scan_time_utc": scan_time,
         "state_source": state_source,
@@ -365,6 +367,13 @@ def write_markdown_report(report: Dict[str, Any], path: Optional[Path] = None) -
             lines.append(f"    - {name}: {evidence['status']} — {evidence['explanation']} | {evidence['evidence_url']} | checked {evidence['last_verified_at']}")
         for task in quest.get("tasks", {}).values():
             lines.append(f"  - [{task['status']}] {task['text']}")
+    recovery = report.get("opportunity_recovery") or {}
+    lines.extend(["", "## Evidence recovery", ""])
+    lines.append(f"Total persisted candidates: {recovery.get('total_candidates', 0)} | {recovery.get('qualification_counts', {})}")
+    lines.append(f"All public evidence resolved: {recovery.get('all_public_evidence_resolved', 0)}; participant-specific checks pending: {recovery.get('awaiting_participant_verification', 0)}")
+    for field, group in recovery.get('review_required_by_missing_field', {}).items():
+        lines.append(f"- {field}: {group['count']}")
+    lines.append("Complete field gaps and resolution outcomes: opportunity_recovery.json. Badges/points are not income.")
     lines.extend(["", "## Integrasi quest", ""])
     for adapter in report.get("quest_adapters") or []:
         lines.append(f"- {adapter['adapter']}: {adapter['status']} — {adapter['reason']}")

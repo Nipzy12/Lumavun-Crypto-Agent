@@ -17,18 +17,35 @@ def main():
     parser.add_argument('--decision', choices=['accept', 'reject', 'defer'], help='Explicit candidate review; never overrides missing facts or approves a task')
     parser.add_argument('--reason', default='', help='Reason for the review decision')
     parser.add_argument('--reviewer', default='operator', help='Reviewer identifier, no personal information required')
+    parser.add_argument('--submit-url', help='Official URL request; no facts are approved by submission')
+    parser.add_argument('--revalidate', action='store_true', help='Independently check approved official transports; respect cache/backoff')
     parser.add_argument('--quest')
     parser.add_argument('--task')
     parser.add_argument('--evidence', help='Human decision/completion note, never private information or secrets')
     args = parser.parse_args()
-    if args.decision and args.action != 'review':
+    if (args.decision or args.submit_url or args.revalidate) and args.action != 'review':
         parser.error('--decision is only valid with review')
-    state = load_state_from_artifact(read_only=args.action in ('list', 'review') and not args.decision)
+    state = load_state_from_artifact(read_only=args.action in ('list', 'review') and not (args.decision or args.submit_url or args.revalidate))
     update_queue(state, [])
     if args.action == 'list':
         print(json.dumps(state.get('quest_queue', {}), indent=2, ensure_ascii=False))
         return 0
     if args.action == 'review':
+        from recovery import submit_url, revalidate
+        if args.quest and args.quest not in state.get("quest_queue", {}):
+            parser.error("Unknown quest ID")
+        if args.submit_url:
+            if not args.quest or args.quest not in state.get('quest_queue', {}):
+                parser.error('--submit-url requires an existing --quest ID')
+            try:
+                submit_url(state['quest_queue'][args.quest], args.submit_url)
+            except ValueError as exc:
+                parser.error(str(exc))
+            save_state_locally(state)
+        if args.revalidate:
+            from config_loader import effective_sources, load_config
+            revalidate(state, effective_sources(), load_config(), candidate_ids={args.quest} if args.quest else None)
+            save_state_locally(state)
         if args.decision:
             if not args.quest or not args.evidence:
                 parser.error('--quest and --evidence are required for a review decision')

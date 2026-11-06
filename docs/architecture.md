@@ -1,4 +1,4 @@
-# LUMAVUN V1.4.2 architecture
+# LUMAVUN V1.4.3 architecture
 
 ## Data flow
 
@@ -100,3 +100,9 @@ Daily diagnostics use the existing persisted summary notification key. Source fa
 `qualification.py` sits between quest extraction and alert/action decisions. `refresh_status` recalculates qualification separately from legacy task lifecycle state. `main.py` gates alerts on ACTIONABLE and includes a deterministic grouped shortlist; diagnostics expose current-scan counts by qualification status. `reporter.py` includes all field evidence in the existing artifacts.
 
 `review_candidate` records append-only events without changing source facts. `persistence_v14.py` migrates additive fields, unions histories across merges, preserves valid task proofs when optional metadata is malformed and archives tasks removed from source observations. The existing state envelope, daily notification keys and wallet attribution mechanism are retained. See [qualification specification](qualification-v142.md) for exact weights, gating semantics and compatibility limits.
+
+## V1.4.3 recovery layer
+
+`recovery.py` groups qualification gaps, accepts evidence URL requests and revalidates canonical records through approved official source adapters. Scheduled observations are reused; additional source reads are batched, cached and backed off persistently. A submitted URL never directly changes a qualification field. Unsupported HTML pages are not fetched.
+
+`quests.update_queue` records changed terms and prior task proofs, preserving canonical IDs and completion history while invalidating current approvals. Qualification adds a changed-terms review hold. `persistence_v14.py` unions requests/change histories and merges the latest resolver metadata. `main.py` writes the all-persisted-candidate recovery report, embedded by `reporter.py` and uploaded in the existing report artifact. Wallet attribution, notification keys and schedules retain their existing paths. See [evidence recovery specification](evidence-recovery-v143.md).

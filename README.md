@@ -1,8 +1,21 @@
-# LUMAVUN Autonomous Crypto Agent V1.4.2
+# LUMAVUN Autonomous Crypto Agent V1.4.3
 
 A zero-capital airdrop intelligence system: it reads a registry of verified sources (RSS/Atom feeds and public JSON APIs), extracts campaigns with their evidence, classifies the opportunity, applies a zero-capital filter, scores explainable risk indicators, and sends actionable Telegram notifications. It also monitors a Phantom wallet's SOL and SPL balances read-only.
 
 **No guaranteed earnings. No automatic claiming, wallet signing, transactions, or trades.** Every report states this in plain words.
+
+## V1.4.3 — Evidence resolution and opportunity recovery
+
+Review output now groups public evidence gaps separately from participant-specific checks and shows the complete minimum set of missing mandatory fields. Submit official URLs for **independent revalidation**, not approval:
+
+```bash
+python scripts/quest_queue.py review --quest QUEST_ID --submit-url 'https://official.example/campaign'
+python scripts/quest_queue.py review --quest QUEST_ID --revalidate
+```
+
+The example is not a configured source. Only reviewed official feed/API bindings are revisited; unsupported pages are reported without scraping. Missing evidence stays UNKNOWN. Additional reads use caching, rate limits and retry backoff. Changed or explicitly withdrawn terms are tracked, and changed terms invalidate current consent while preserving historical task proofs.
+
+The persistent `opportunity_recovery.json` artifact reports all candidates, missing-field groups, public/participant evidence status, qualification outcomes and confirmed received rewards. State, canonical IDs, reviews, notification deduplication, existing schedules/secrets and read-only wallet monitoring are preserved. See [resolver boundaries, CLI and report details](docs/evidence-recovery-v143.md).
 
 ## V1.4.2 — Opportunity qualification and evidence
 

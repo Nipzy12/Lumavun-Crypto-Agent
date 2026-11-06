@@ -99,7 +99,7 @@ def qualify(record, now=None):
     review = record.get('human_review') or {}
     status = ('EXPIRED' if end and end < now or platform == 'Expired' else
               'BLOCKED' if failed or review.get('decision') == 'reject' or record.get('campaign_type') == 'NEWS_ONLY' else
-              'REVIEW_REQUIRED' if missing or review.get('decision') == 'defer' or not record.get('evidence_verified') else 'ACTIONABLE')
+              'REVIEW_REQUIRED' if missing or record.get('terms_review_required') or review.get('decision') == 'defer' or not record.get('evidence_verified') else 'ACTIONABLE')
     score = sum(WEIGHTS[k] for k,v in fields.items() if v['status'] == 'PASS')
     if record.get('risk_band') == 'medium':
         score = max(0, score - 5)
