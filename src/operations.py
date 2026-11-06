@@ -93,7 +93,7 @@ def playbook(record, now=None):
     q = qualify(record, now)
     axes = classify(record, q)
     ops = record.get('operations') or {'state': 'DISCOVERED'}
-    execution = q['status'] == 'ACTIONABLE' and ops.get('state') not in ('BLOCKED', 'EXPIRED', 'CANCELLED', 'WITHDRAWN', 'REWARD_VERIFIED')
+    execution = q['status'] == 'ACTIONABLE' and ops.get('state') in ('ELIGIBLE', 'READY_FOR_HUMAN', 'IN_PROGRESS', 'SUBMITTED', 'AWAITING_RESULT')
     from recovery import gap_analysis
     result = {'campaign_id': record['id'], 'name': record.get('name'), 'lifecycle': ops['state'],
               'qualification': q['status'], 'expected_revision': operation_revision(record),
@@ -108,7 +108,7 @@ def playbook(record, now=None):
               'completion_evidence': 'Human confirmation for each task and submission receipt; reward verification requires a finalized attributed wallet transfer.',
               'checklist': [dict(text=t['text'], approval_required=t.get('approval_reasons', []), completed=bool(t.get('completion'))) for t in record.get('tasks', {}).values()] if execution else gap_analysis(record, now)['verification_steps']}
     if not execution and not result['checklist']:
-        result['checklist'] = [{'next_action': 'Inspect failed conditions or terminal lifecycle; no execution authorized.', 'failed_conditions': q['failed_conditions']}]
+        result['checklist'] = [{'next_action': 'Review qualification and applicant fit; explicitly authorize ELIGIBLE before execution. Blocked or terminal outcomes cannot execute.', 'failed_conditions': q['failed_conditions']}]
     if axes['reward_type'] == 'grant':
         result['grant_track'] = {'budget_is_income': False, 'plan': ops.get('grant_plan', {}),
                                  'planning_steps': ['Review actual applicant fit', 'Verify technical requirements', 'Draft proposal with truthful claims and evidence', 'Plan deliverables and milestones', 'Verify submission deadline', 'Human approval before application; record receipt afterwards'] if execution else ['Verify applicant fit against official conditions', 'Obtain official requirements, selection criteria and deadline', 'Resolve missing evidence before application execution']}

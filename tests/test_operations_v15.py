@@ -98,3 +98,10 @@ def test_idempotent_migration_and_state_merge_preserve_progress(tmp_path, monkey
     assert restored['quest_queue'][q['id']]['operation_history'] == merged['quest_queue'][q['id']]['operation_history']
     update_queue(restored, [deepcopy(before)], NOW)
     assert restored['quest_queue'][q['id']]['operations']['state'] == 'READY_FOR_HUMAN'
+
+
+def test_qualified_facts_do_not_replace_explicit_eligible_transition():
+    q,_=qualified();sync(q,now=NOW)
+    assert playbook(q,NOW)['kind']=='EVIDENCE_GATHERING_ONLY'
+    move(q,'ELIGIBLE')
+    assert playbook(q,NOW)['kind']=='HUMAN_ACTION_CHECKLIST'

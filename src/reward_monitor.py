@@ -16,6 +16,7 @@ class HistoryGap(RuntimeError):
 
 def reconcile(address, providers, tracker, *, now=None, rpc=None, sleep=time.sleep, page_size=20, max_pages=2, request_budget=24):
     from rewards import transaction_changes
+    live_clock = now is None
     now = now or datetime.now(timezone.utc)
     rpc = rpc or _rpc_post
     previous = tracker.get('monitor')
@@ -140,7 +141,8 @@ def reconcile(address, providers, tracker, *, now=None, rpc=None, sleep=time.sle
         failures = monitor.get('failures', 0)
         failures = failures if type(failures) is int and failures >= 0 else 0
         failures = min(failures + 1, 10)
-        monitor.update(status='RPC_UNAVAILABLE', failures=failures, retry_at=(now + timedelta(seconds=min(3600, 5 * 2 ** failures))).isoformat(),
+        retry_base = datetime.now(timezone.utc) if live_clock else now
+        monitor.update(status='RPC_UNAVAILABLE', failures=failures, retry_at=(retry_base + timedelta(seconds=min(3600, 5 * 2 ** failures))).isoformat(),
                        history_complete_to_cursor=False, gaps=['UNRESOLVED_HISTORY_OR_TRANSACTION'])
         errors.append('Transaction RPC unavailable, invalid, or history incomplete; cursor preserved')
     monitor.update(updated_at=now.isoformat(), requests=calls, provider_number=provider_used,
