@@ -135,3 +135,12 @@ def test_import_lock_fails_closed(tmp_path, monkeypatch):
     with pytest.raises(TimeoutError):
         with state_lock(timeout=0, strict=True):
             pytest.fail('Must not enter unlocked transaction')
+
+
+def test_contribution_grants_are_not_developer_quests():
+    q, _ = qualified(name='Foundation Mission Request: SupNERD [CONTRIBUTIONS]')
+    axes = classify(q, qualify(q, NOW))
+    assert axes['reward_type'] == 'grant'
+    assert axes['participation_model'] == 'community contribution'
+    q['name'] = 'General grant'
+    assert classify(q, qualify(q, NOW))['participation_model'] == 'unknown'
