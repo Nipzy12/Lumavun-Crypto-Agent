@@ -1,4 +1,4 @@
-name: LUMAVUN Crypto Agent V1.4
+name: LUMAVUN Crypto Agent V1.4.1
 on:
   workflow_dispatch:
     inputs:
@@ -31,9 +31,9 @@ jobs:
     env:
       LUMAVUN_REQUEST_TIMEOUT: '20'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: '3.12'
           cache: pip
@@ -125,7 +125,7 @@ jobs:
       # run still leaves diagnostics behind.
       - name: Upload reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: latest_report
           path: |
@@ -137,7 +137,7 @@ jobs:
 
       - name: Upload dedup state
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: dedup_state
           path: dedup_state.json
@@ -147,7 +147,7 @@ jobs:
 
       - name: Upload source health
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: source_health
           path: source_health.json

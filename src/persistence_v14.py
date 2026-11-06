@@ -12,6 +12,7 @@ QUEST_FIELDS = {
     'reward_guaranteed', 'reward_evidence', 'networks', 'wallet_requirements', 'mandatory_fees',
     'cost_status', 'cost_evidence', 'eligibility_restrictions', 'eligibility_status',
     'eligibility_evidence', 'risk_indicators', 'risk_explanation', 'risk_band', 'campaign_type',
+    'announcement_url', 'evidence_checks', 'reasons', 'human_review',
     'platform_status', 'status', 'verified_at', 'first_seen', 'updated_at', 'last_observed', 'terms_hash',
 }
 TASK_FIELDS = {'id', 'text', 'approval_reasons', 'status', 'approval', 'completion'}
@@ -58,6 +59,10 @@ def clean_queue(value):
             entry['approval'] = _proof(task.get('approval'), 'human_approval')
             entry['completion'] = _proof(task.get('completion'), 'human_confirmation')
             tasks[tid] = entry
+        review = record.get('human_review')
+        proof = _proof(review, 'human_review')
+        clean['human_review'] = ({**proof, 'decision': review['decision']}
+                                 if proof and review.get('decision') in ('accept', 'reject', 'defer') else None)
         clean['tasks'] = tasks
         result[ident] = clean
     return result
@@ -98,6 +103,10 @@ def merge_extensions(base, update):
             continue
         winner, other = (record, old) if record['updated_at'] >= old['updated_at'] else (old, record)
         winner = deepcopy(winner)
+        if winner.get('terms_hash') == other.get('terms_hash'):
+            reviews = [r for r in (winner.get('human_review'), other.get('human_review')) if r]
+            if reviews:
+                winner['human_review'] = max(reviews, key=lambda r: r['at'])
         for tid, task in winner['tasks'].items():
             previous = other['tasks'].get(tid, {})
             for key in ('approval', 'completion'):

@@ -121,6 +121,7 @@ class RawItem:
     official_url: str = ""
     extra_urls: List[str] = field(default_factory=list)
     entry_id: str = ""
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -528,8 +529,37 @@ def _iso_to_ts(value: Optional[str]) -> Optional[float]:
     return parsed.timestamp()
 
 
+def parse_bankless_lessons(body: bytes, spec: SourceSpec) -> List[RawItem]:
+    """Documented public lesson API; never read quiz answers or execute quests."""
+    if spec.url != "https://app.banklessacademy.com/api/lessons" or not spec.official:
+        raise SourceError(spec.id, "Bankless adapter requires the verified official endpoint")
+    payload = json.loads(body)
+    if not isinstance(payload, list):
+        raise SourceError(spec.id, "Expected a lesson array")
+    result = []
+    for row in payload:
+        if not isinstance(row, dict):
+            raise SourceError(spec.id, "Invalid lesson record")
+        if row.get("publicationStatus") != "publish" or row.get("type") != "LESSON" or not row.get("quest"):
+            continue
+        url = (row.get("lessonLinks") or {}).get("en", "")
+        if urlparse(url).scheme != "https" or urlparse(url).netloc != "app.banklessacademy.com":
+            continue
+        name = row.get("englishName") or row.get("name")
+        if not isinstance(name, str) or not name.strip():
+            continue
+        tasks = row.get("learningActions") or ""
+        tasks = [t.strip() for t in tasks.splitlines() if t.strip()] if isinstance(tasks, str) else []
+        badge = row.get("badgeId")
+        reward = isinstance(badge, int) and not isinstance(badge, bool) and badge > 0
+        result.append(RawItem(name, "\n".join(tasks), url, url, spec.url, spec.id,
+                              metadata={"bankless": True, "tasks": tasks, "reward": reward, "badge_id": badge}))
+    return result
+
+
 PARSERS: Dict[str, Callable[[bytes, SourceSpec], List[RawItem]]] = {
     "feed": parse_feed,
+    "bankless_lessons": parse_bankless_lessons,
     "wp_rest_posts": parse_wp_rest_posts,
 }
 

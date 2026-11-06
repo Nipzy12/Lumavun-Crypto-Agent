@@ -73,7 +73,7 @@ def _candidate_paths() -> List[Path]:
     ]
 
 
-def load_state_from_artifact() -> Dict[str, Any]:
+def load_state_from_artifact(*, read_only: bool = False) -> Dict[str, Any]:
     """Load persistent state from the previous run's artifact.
 
     In GitHub Actions the file is placed in the workspace by the restore
@@ -86,10 +86,12 @@ def load_state_from_artifact() -> Dict[str, Any]:
             with open(path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
         except Exception:
-            _quarantine(path)
+            if not read_only:
+                _quarantine(path)
             return default_state()
         if not isinstance(data, dict):
-            _quarantine(path)
+            if not read_only:
+                _quarantine(path)
             return default_state()
         return _sanitize_state(data)
     return default_state()

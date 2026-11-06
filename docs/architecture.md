@@ -1,4 +1,4 @@
-# LUMAVUN V1.4 architecture
+# LUMAVUN V1.4.1 architecture
 
 ## Data flow
 
@@ -84,3 +84,13 @@ Official documentation fetched successfully over verified HTTPS:
 Galxe's schema is documented and covered by mocked contract tests. A live authorized Galxe query has **not** been verified because no token is configured; it remains disabled/AUTH_REQUIRED. A successful runtime query validates identity and schema before accepting any result. Reviewed ID/URL mappings are required because the documented metadata query does not supply an official URL; the adapter never constructs campaign URLs by guesswork. No claim, credential mutation, account authorization or social action API is called.
 
 Other platforms require a reviewed public feed or a separately implemented documented adapter. Unknown platforms report UNSUPPORTED. Manual URLs must have a matching official-feed announcement; mere page accessibility is not reward evidence.
+
+## V1.4.1 diagnostics and review
+
+`SourceHealth.observations` retains every analyzed entry before the legacy report cap. `main.py` combines these with adapter observations, selects one current record per canonical ID, and updates the existing queue. `diagnostics.py` emits reason objects (`code`, `detail`, `next_action`) and separate source failures. Repeated observations get DUPLICATE without conflating discovery with delivery; notification history remains authoritative for successful sends and retries.
+
+Bankless Academy uses a named public JSON parser in `sources.py`. Only the documented endpoint and official lesson host are accepted. `discovery.py` maps its explicit task/badge fields, with UNKNOWN costs and eligibility unless mandatory task payment establishes FAIL. General educational prose and quiz answers never become task evidence. EDUCATIONAL_BADGE is separate from token receipts.
+
+`quests.review_candidate` records accept/reject/defer with a substantive human note, timestamp and terms-scoped persistence. Accept runs the normal eligibility gates and cannot grant task consent. `persistence_v14.py` validates review proofs and preserves the latest review when merging unchanged terms. Read-only CLI listing never writes or quarantines the artifact, including malformed JSON; normal scans retain existing corruption recovery.
+
+Daily diagnostics use the existing persisted summary notification key. Source failures, news rejections, official evidence, cost PASS and actual receipts have separate counters. The legacy capped campaign list remains available for compatibility; consumers wanting complete scan decisions should use `discovery_diagnostics`. Historical completed tasks and confirmed reward receipts are explicitly cumulative rather than daily earnings.

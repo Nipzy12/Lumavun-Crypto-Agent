@@ -6,7 +6,7 @@ import re
 from datetime import datetime, time, timezone
 from typing import Any
 
-from analysis import extract_eligibility, extract_tasks
+from analysis import extract_eligibility, extract_tasks, has_reward_program
 
 STATES = {"DISCOVERED", "VERIFIED", "READY", "NEEDS_APPROVAL", "COMPLETED", "REJECTED", "EXPIRED"}
 APPROVAL_ACTIONS = {
@@ -81,6 +81,10 @@ def from_campaign(campaign, text: str = "", metadata: dict | None = None) -> dic
     record = {
         "id": campaign.campaign_id, "project": campaign.project, "name": campaign.title,
         "official_url": campaign.official_url, "source": campaign.source,
+        "announcement_url": campaign.announcement_url or campaign.url,
+        "evidence_checks": {"official": bool(campaign.official_url and campaign.source_verification_status in ("official_feed", "authorized_galxe_api")),
+                            "reward": bool(campaign.evidence_verified or has_reward_program(campaign.title + " " + text)),
+                            "participation": bool(campaign.tasks), "organizer": bool(campaign.project)},
         "evidence_verified": campaign.evidence_verified,
         "evidence": [campaign.opportunity_reason, campaign.reward_text or "", *campaign.tasks],
         "source_verification_status": campaign.source_verification_status,
@@ -111,8 +115,12 @@ def _status(record: dict, now: datetime) -> str:
             or record.get("eligibility_status") == "FAIL" or record.get("risk_band") == "high"
             or record.get("platform_status") in ("Deleted", "CapReached", "Draft")):
         return "REJECTED"
+    if (record.get("human_review") or {}).get("decision") == "reject":
+        return "REJECTED"
     if not record.get("evidence_verified"):
         return "DISCOVERED"
+    if (record.get("human_review") or {}).get("decision") == "defer":
+        return "VERIFIED"
     observed = parse_time(record.get("last_observed"))
     if observed is None or (now - observed).total_seconds() > 86400:
         return "VERIFIED"
@@ -133,6 +141,8 @@ def _status(record: dict, now: datetime) -> str:
 
 def refresh_status(record: dict, now: datetime) -> None:
     record["status"] = _status(record, now)
+    from diagnostics import candidate_reasons
+    record["reasons"] = candidate_reasons(record, now=now)
     for task in record.get("tasks", {}).values():
         if task.get("completion"):
             task["status"] = "COMPLETED"
@@ -159,6 +169,8 @@ def update_queue(state: dict, quests: list[dict], now: datetime | None = None) -
         # Consent applies to the exact quest terms, not just an unchanged verb.
         terms = repr([incoming.get(k) for k in ("official_url", "cost_status", "eligibility_restrictions", "end_at", "risk_indicators")])
         incoming["terms_hash"] = hashlib.sha256(terms.encode()).hexdigest()
+        if old.get("terms_hash") == incoming["terms_hash"]:
+            incoming["human_review"] = old.get("human_review")
         for ident, task in incoming["tasks"].items():
             previous = old.get("tasks", {}).get(ident, {})
             if old.get("terms_hash") == incoming["terms_hash"]:
@@ -209,3 +221,23 @@ def queue_digest(queue: dict, observed_ids: set[str] | None = None) -> dict:
         "expired_quests": sum(q["status"] == "EXPIRED" for q in records),
         "actionable_quests": sum(q["status"] in ("READY", "NEEDS_APPROVAL") for q in records if observed_ids is None or q["id"] in observed_ids),
     }
+
+
+def review_candidate(state: dict, quest_id: str, decision: str, evidence: str,
+                     now: datetime | None = None) -> None:
+    """Explicit candidate review never supplies missing facts or task consent."""
+    from copy import deepcopy
+    now = now or datetime.now(timezone.utc)
+    if decision not in ("accept", "reject", "defer"):
+        raise ValueError("Review decision must be accept, reject or defer")
+    if not evidence.strip() or re.fullmatch(r"https?://\S+", evidence.strip()):
+        raise ValueError("A substantive human review note is required")
+    record = state["quest_queue"][quest_id]
+    trial = deepcopy(record)
+    trial.pop("human_review", None)
+    refresh_status(trial, now)
+    if decision == "accept" and trial["status"] not in ("READY", "NEEDS_APPROVAL", "COMPLETED"):
+        raise ValueError("Cannot accept: evidence, PASS costs, eligibility and freshness must already pass; UNKNOWN is never approved")
+    record["human_review"] = {"kind": "human_review", "decision": decision, "at": now.isoformat(), "evidence": evidence[:500]}
+    record["updated_at"] = now.isoformat()
+    refresh_status(record, now)

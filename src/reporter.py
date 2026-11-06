@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from discovery import Campaign, SourceHealth
 
-AGENT_VERSION = "1.4"
+AGENT_VERSION = "1.4.1"
 OPPORTUNITY_TYPES = (
     "CONFIRMED_AIRDROP",
     "POINTS_PROGRAM",
@@ -84,12 +84,14 @@ def build_report(
     quest_queue: Optional[Dict[str, Any]] = None,
     adapter_health: Optional[List[Dict[str, Any]]] = None,
     reward_tracking: Optional[Dict[str, Any]] = None,
+    discovery_diagnostics: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the machine-readable report dict."""
     campaign_dicts = [_campaign_dict(c) for c in campaigns]
     return {
         "agent": f"LUMAVUN Crypto Agent V{AGENT_VERSION}",
         "quest_queue": quest_queue or {},
+        "discovery_diagnostics": discovery_diagnostics or {},
         "quest_adapters": adapter_health or [],
         "reward_tracking": reward_tracking or {},
         "version": AGENT_VERSION,
@@ -102,6 +104,7 @@ def build_report(
                 "reachable": h.reachable,
                 "error": h.error,
                 "entries_analyzed": h.entries_analyzed,
+                "entries_received": h.entries_received,
                 "campaigns_found": h.campaigns_found,
                 "source_id": h.source_id,
                 "label": h.label,
@@ -342,6 +345,16 @@ def write_markdown_report(report: Dict[str, Any], path: Optional[Path] = None) -
         )
         lines.append("")
 
+    lines.extend(["## Diagnostik discovery", ""])
+    diagnostics = report.get("discovery_diagnostics") or {}
+    for metric, value in diagnostics.get("statistics", {}).items():
+        lines.append(f"- {metric}: {value}")
+    for row in diagnostics.get("candidates", []):
+        lines.append(f"- {row['name']} ({row['cost_status']}): " + ", ".join(r["code"] for r in row["reasons"]))
+        lines.append(f"  - sumber: {row['source_url']}; langkah berikut: " + "; ".join(row["next_actions"]))
+    for failure in diagnostics.get("source_failures", []):
+        lines.append(f"- SOURCE_UNREACHABLE: {failure['source_url']}")
+    lines.append("")
     lines.extend(["## Antrean quest V1.4", ""])
     for quest in (report.get("quest_queue") or {}).values():
         lines.append(f"- **{quest['name']}** — {quest['status']} | biaya {quest['cost_status']} | eligibility {quest['eligibility_status']}")

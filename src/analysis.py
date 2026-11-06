@@ -369,6 +369,11 @@ def _hits(text: str, signals: Sequence[str]) -> List[str]:
     return [signal for signal in signals if re.search(r"(?<!\w)" + re.escape(str(signal).lower().strip()) + r"(?!\w)", lowered)]
 
 
+def has_reward_program(combined: str) -> bool:
+    """Program evidence used consistently by classification and diagnostics."""
+    return bool(re.search(r"\b(?:airdrop|reward|incentive|points|quest|bounty)\s+(?:program|campaign|pool|season)|\b(?:earn|receive|win|claim|distribute[sd]?)\b.{0,80}\b(?:tokens?|points|rewards?|prizes?|airdrop)\b", combined, re.I))
+
+
 def classify_opportunity(
     title: str,
     text: str,
@@ -391,7 +396,7 @@ def classify_opportunity(
     3. Otherwise points, testnet and quest signals are checked in order.
     """
     combined = f"{title} {text}"
-    program = re.search(r"\b(?:airdrop|reward|incentive|points|quest|bounty)\s+(?:program|campaign|pool|season)|\b(?:earn|receive|win|claim|distribute[sd]?)\b.{0,80}\b(?:tokens?|points|rewards?|prizes?|airdrop)\b", combined, re.I)
+    program = has_reward_program(combined)
     tasks = [task for task in extract_tasks(text) if re.search(
         r"(?:^|[.;:]\s*|\b(?:must|should|need to|participants? (?:must|can))\s+)(?:follow|join|connect|submit|verify|complete|register|sign up|retweet|bridge|swap|mint|stake|deploy|hold|vote)\b", task, re.I
     )]

@@ -1,8 +1,28 @@
-# LUMAVUN Autonomous Crypto Agent V1.4
+# LUMAVUN Autonomous Crypto Agent V1.4.1
 
 A zero-capital airdrop intelligence system: it reads a registry of verified sources (RSS/Atom feeds and public JSON APIs), extracts campaigns with their evidence, classifies the opportunity, applies a zero-capital filter, scores explainable risk indicators, and sends actionable Telegram notifications. It also monitors a Phantom wallet's SOL and SPL balances read-only.
 
 **No guaranteed earnings. No automatic claiming, wallet signing, transactions, or trades.** Every report states this in plain words.
+
+## V1.4.1 — Discovery diagnostics and source quality
+
+Every examined entry now has structured decision reasons and next actions in `discovery_diagnostics`, even when the legacy campaign report reaches its 20-item cap. Counts distinguish articles examined, news, unique campaign candidates, evidence-verified quests, cost PASS, actionable quests, approvals, completed tasks and confirmed attributed reward receipts. Counts describe the latest scan; completed tasks and received rewards are cumulative. Cost PASS alone does not establish eligibility or official evidence. A verified source can publish an unqualified quest.
+
+The seventh default source is the documented **Bankless Academy lesson API**. Published badge quests are parsed conservatively; handbooks and deprecated content are excluded. Badges are educational achievements, never earnings. Missing fee/task/eligibility evidence prevents actionable alerts. See [source review and Actions compatibility](docs/source-review-v141.md). Existing feed overrides remain compatible and intentionally replace the default registry.
+
+Candidate review (read-only without `--decision`):
+
+```bash
+python scripts/quest_queue.py review
+python scripts/quest_queue.py review --quest QUEST_ID
+python scripts/quest_queue.py review --quest QUEST_ID --decision defer --evidence 'Waiting for official fee and eligibility evidence'
+python scripts/quest_queue.py review --quest QUEST_ID --decision reject --evidence 'Reviewed evidence does not support participation'
+python scripts/quest_queue.py review --quest QUEST_ID --decision accept --evidence 'Reviewed current evidence, fees and eligibility'
+```
+
+`accept` requires every existing evidence, PASS-cost, eligibility and freshness gate to pass. It does not approve individual sensitive tasks. UNKNOWN cannot be overridden. Review decisions persist in `dedup_state.json` and survive scans with unchanged terms; changed terms require review again. To review the production queue locally, download the latest successful run's `dedup_state` artifact first; a local review only affects that local artifact. Existing workflow task-approval inputs are unchanged.
+
+Telegram includes the discovery counts in its once-per-UTC-day digest. Successful delivery is persisted under the existing daily key, so deploying this patch does not resend today's digest. No new credentials or dependencies. State schema stays 1.4 with additive fields; scheduling remains `17 1,13 * * *`.
 
 ## V1.4 — Quest Discovery & Zero-Capital Assistant
 

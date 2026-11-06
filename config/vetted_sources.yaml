@@ -38,6 +38,18 @@ default_feeds:
 #     news -> general crypto newsroom
 # ---------------------------------------------------------------------------
 sources:
+  - id: bankless-academy-lessons
+    label: "Bankless Academy — official public lesson quests"
+    url: "https://app.banklessacademy.com/api/lessons"
+    kind: json
+    parser: bankless_lessons
+    category: official_project
+    official: true
+    enabled: true
+    notes: >
+      Documented in the official /llms.txt; robots.txt explicitly permits agents.
+      Published lessons with quest components only. Badge rewards are educational,
+      not income. Fees and eligibility remain UNKNOWN. See docs/source-review-v141.md.
   - id: airdropalert-rss
     label: "AirdropAlert — campaign listing feed (RSS)"
     url: "https://airdropalert.com/feed/rssfeed"
@@ -128,6 +140,16 @@ sources:
 # estimates.
 # ---------------------------------------------------------------------------
 verified_sources:
+  - url: https://app.banklessacademy.com/api/lessons
+    http_status: 200
+    content_type: application/json
+    feed_format: "Documented public JSON lesson array"
+    entries_at_check: 23
+    focus: "Official educational badge quests; ten published lessons with quest components"
+    notes: >
+      Checked 2026-11-06. Linked by official /llms.txt, MIT content ownership
+      and explicit crawler permission documented in /robots.txt. Three records
+      have learningActions; remaining task details require human verification.
   - url: https://airdropalert.com/feed/rssfeed
     http_status: 200
     content_type: application/rss+xml

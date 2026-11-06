@@ -131,6 +131,8 @@ class SourceHealth:
     robots_blocked: bool = False
     rejected_news: int = 0
     verified_opportunities: int = 0
+    entries_received: int = 0
+    observations: list = field(default_factory=list)
 
 
 def _normalize(text: str) -> str:
@@ -370,9 +372,32 @@ def _build_campaign(
         risk_explanation=risk.explanation,
         published_ts=item.published_ts,
     )
+    if item.metadata.get("bankless") and spec.parser == "bankless_lessons" and source_verified:
+        # Structured fields establish a badge quest, never token income. Lesson
+        # narrative is intentionally excluded: educational fees are not task fees.
+        campaign.project = "Bankless Academy"
+        campaign.tasks = item.metadata["tasks"]
+        campaign.evidence_verified = bool(campaign.tasks and item.metadata["reward"])
+        campaign.opportunity_type = "FREE_QUEST" if campaign.evidence_verified else "UNVERIFIED"
+        campaign.opportunity_reason = "Official lesson API: quest component and badge ID; participation requirements from learningActions"
+        campaign.reward_status = "stated" if item.metadata["reward"] else "unspecified"
+        campaign.reward_text = f"Educational badge ID {item.metadata['badge_id']}" if item.metadata["reward"] else ""
+        campaign.reward_note = "Badge availability and fees require review; no monetary reward promised"
+        campaign.cost_status = "FAIL" if zero_capital.status == "FAIL" else "UNKNOWN"
+        campaign.zero_capital_ok = False
+        campaign.zero_capital_reason = zero_capital.reason if zero_capital.status == "FAIL" else "API does not establish mandatory quest or claim fees"
+        campaign.unknown_costs = ["Quest and claim fees not established"]
     campaign.campaign_id = campaign_id_for(campaign)
     from quests import from_campaign
     campaign.quest_intelligence = from_campaign(campaign, summary)
+    if item.metadata.get("bankless") and spec.parser == "bankless_lessons" and source_verified:
+        from quests import task_checklist
+        q = campaign.quest_intelligence
+        q["tasks"] = task_checklist(campaign.tasks, campaign.campaign_id)
+        q["evidence_checks"]["reward"] = item.metadata["reward"]
+        q["reward_type"] = "EDUCATIONAL_BADGE"
+        q["eligibility_status"] = "UNKNOWN"
+        q["eligibility_evidence"] = "API does not establish participant restrictions"
     return campaign
 
 
@@ -464,6 +489,7 @@ def scan_sources(
             respect_robots=use_robots,
             session=session,
         )
+        observed = []
         found = 0
         rejected_news = 0
         verified_opportunities = 0
@@ -471,11 +497,15 @@ def scan_sources(
             campaign = _build_campaign(item, spec, config)
             if campaign is None:
                 continue
+            observed.append(campaign.quest_intelligence)
             campaigns.append(campaign)
             rejected_news += campaign.opportunity_type == "NEWS_ONLY"
             verified_opportunities += campaign.evidence_verified and campaign.zero_capital_ok is True
             found += 1
         health = _health_from_result(result, found)
+        health.entries_received = result.entries_seen
+        health.entries_analyzed = len(result.items[:max_entries])
+        health.observations = observed
         health.rejected_news = rejected_news
         health.verified_opportunities = verified_opportunities
         health_list.append(health)

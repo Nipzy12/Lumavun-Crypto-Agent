@@ -44,6 +44,7 @@ from wallet import read_wallet
 from quest_adapters import discover_quests, load_quest_config
 from quests import from_campaign, update_queue, queue_digest
 from rewards import update_rewards
+from diagnostics import discovery_report
 
 # Reports contain Indonesian text and status symbols. Force UTF-8 so a
 # non-UTF-8 console (for example a Windows cp1252 shell) cannot crash the run.
@@ -59,7 +60,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-AGENT_VERSION = "1.4"
+AGENT_VERSION = "1.4.1"
 
 
 def _env_list(name: str) -> List[str]:
@@ -130,8 +131,20 @@ def main() -> int:
     quest_settings = load_quest_config()
     campaigns, adapter_health = discover_quests(campaigns, source_health, config, quest_settings)
     state = load_state_from_artifact()
-    observed_quests = [c.quest_intelligence or from_campaign(c) for c in campaigns]
-    queue = update_queue(state, observed_quests)
+    previous_ids = set(state.get("seen", {})) | set(state.get("quest_queue", {}))
+    observed_quests = [q for health in source_health for q in health.observations]
+    observed_keys = {(q["id"], q["source"]) for q in observed_quests}
+    for campaign in campaigns:
+        record = campaign.quest_intelligence or from_campaign(campaign)
+        if (record["id"], record["source"]) not in observed_keys:
+            observed_quests.append(record)
+            observed_keys.add((record["id"], record["source"]))
+    unique_quests = {}
+    for record in observed_quests:
+        previous = unique_quests.get(record["id"])
+        if previous is None or record["evidence_verified"] or not previous["evidence_verified"]:
+            unique_quests[record["id"]] = record
+    queue = update_queue(state, list(unique_quests.values()))
     quest_summary = queue_digest(queue, {q["id"] for q in observed_quests})
     state_source = os.getenv("LUMAVUN_STATE_SOURCE", "").strip() or "local"
     total_found = len(campaigns)
@@ -177,6 +190,9 @@ def main() -> int:
     reward_tracking = update_rewards(state, wallet, os.getenv("PHANTOM_PUBLIC_ADDRESS", "").strip(), config=quest_settings.get("reward_tracking", {}))
     errors.extend(reward_tracking.get("errors", []) if wallet.get("address_valid") else [])
 
+    discovery_diagnostics = discovery_report(observed_quests, source_health, queue, previous_ids, reward_tracking)
+    quest_summary["discovery_statistics"] = discovery_diagnostics["statistics"]
+
     telegram_result: Optional[Dict[str, Any]] = None
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -221,6 +237,7 @@ def main() -> int:
         total_found=total_found,
         state_source=state_source,
         quest_queue=queue, adapter_health=adapter_health, reward_tracking=reward_tracking,
+        discovery_diagnostics=discovery_diagnostics,
     )
     json_path = write_json_report(report)
     md_path = write_markdown_report(report)

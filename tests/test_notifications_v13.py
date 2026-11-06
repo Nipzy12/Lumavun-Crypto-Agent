@@ -253,7 +253,7 @@ class TestChunking:
             source_health=HEALTH,
             errors=[],
         )
-        assert messages[0].startswith("LUMAVUN Crypto Agent V1.4 - ringkasan harian")
+        assert messages[0].startswith("LUMAVUN Crypto Agent V1.4.1 - ringkasan harian")
         assert all(len(m.encode("utf-8")) <= 4000 for m in messages)
         # Opportunity blocks are grouped, three per message.
         block_messages = messages[1:]

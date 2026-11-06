@@ -358,9 +358,14 @@ def build_daily_summary(
     total = total_found if total_found is not None else new_count
 
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.4 - ringkasan harian")
+    lines.append("LUMAVUN Crypto Agent V1.4.1 - ringkasan harian")
     lines.append(f"Scan: {scan_time}")
     if quest_summary is not None:
+        stats = quest_summary.get("discovery_statistics")
+        if stats is not None:
+            lines.append(f"Artikel dipindai: {stats['articles_scanned']} | berita ditolak: {stats['news_rejected']} | kandidat quest: {stats['quest_candidates']}")
+            lines.append(f"Resmi terverifikasi: {stats['officially_verified']} | zero-capital PASS: {stats['zero_capital_pass']} | actionable: {stats['actionable_quests']}")
+            lines.append(f"Menunggu approval: {stats['awaiting_approval']} | tugas selesai: {stats['completed_tasks']} | reward terkonfirmasi: {stats['confirmed_rewards']}")
         lines.append(f"Quest baru terverifikasi: {quest_summary.get('new_verified_quests', 0)} | menunggu persetujuan: {quest_summary.get('pending_approvals', 0)}")
         lines.append(f"Tugas selesai: {quest_summary.get('completed_tasks', 0)} | kampanye ditolak: {quest_summary.get('rejected_campaigns', 0)} | kedaluwarsa: {quest_summary.get('expired_quests', 0)}")
         received = (reward_summary or {}).get("actual_rewards_received", [])
@@ -368,7 +373,10 @@ def build_daily_summary(
         for receipt in received[-3:]:
             lines.append(f"  {receipt['amount']} {receipt['asset']} | tx {receipt.get('signature', '-')}")
         lines.append("Token masuk tanpa atribusi dan poin yang dijanjikan tidak dihitung sebagai pendapatan.")
-    lines.append(f"Berita ditolak: {rejected} | peluang terverifikasi tanpa biaya: {verified} | errors: {len(errors)}")
+    if not (quest_summary or {}).get("discovery_statistics"):
+        lines.append(f"Berita ditolak: {rejected} | peluang terverifikasi tanpa biaya: {verified} | errors: {len(errors)}")
+    else:
+        lines.append(f"Errors: {len(errors)} | selesai/reward: kumulatif; discovery: scan terkini")
     lines.append("")
     lines.append(_fmt_sol(wallet_summary))
     lines.append(_fmt_tokens(wallet_summary))
@@ -508,7 +516,7 @@ def build_report_message(
     richer output lives in :func:`build_messages`.
     """
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.4")
+    lines.append("LUMAVUN Crypto Agent V1.4.1")
     lines.append("")
     lines.append(f"Waktu scan: {scan_time}")
     lines.append("")
