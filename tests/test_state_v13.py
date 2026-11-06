@@ -79,7 +79,7 @@ class TestCorruptionHandling:
         Path(STATE_FILENAME).write_text("{ this is not json", encoding="utf-8")
         state = load_state_from_artifact()
         assert state["seen"] == {}
-        assert state["version"] == "1.3"
+        assert state["version"] == "1.4"
         # Evidence is kept, not deleted.
         assert Path(CORRUPT_FILENAME).exists()
         assert not Path(STATE_FILENAME).exists()
@@ -175,7 +175,7 @@ class TestConcurrency:
         # All six campaign records survive, plus at least one run counted.
         assert len([k for k in payload["seen"] if k.startswith("campaign-")]) == 6
         assert payload["runs"] >= 1
-        assert payload["version"] == "1.3"
+        assert payload["version"] == "1.4"
 
     def test_no_temporary_files_are_left_behind(self, run_dir):
         save_state_locally(_fresh_state())
@@ -224,7 +224,7 @@ class TestLegacyV12State:
         }
         Path(STATE_FILENAME).write_text(json.dumps(legacy), encoding="utf-8")
         state = load_state_from_artifact()
-        assert state["version"] == "1.3"
+        assert state["version"] == "1.4"
         assert "old key" in state["seen"]
         assert state["seen"]["old key"]["title"] == "Old"
         assert state["notifications"] == {}

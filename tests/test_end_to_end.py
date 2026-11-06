@@ -96,7 +96,7 @@ FEED_BODIES = {
   <title>Arbitrum announces Airdrop campaign</title>
   <link>https://blog.arbitrum.io/incentive</link>
   <pubDate>Thu, 15 Oct 2026 13:43:20 GMT</pubDate>
-  <description>Arbitrum announces an airdrop campaign with confirmed distribution. Follow the account and register to receive 100 tokens. Participation is free. Deadline 2026-12-01.</description>
+  <description>Arbitrum announces an airdrop campaign with confirmed distribution. Follow the account and register to receive 100 tokens. Participation is free. Open to everyone. Deadline 2026-12-01.</description>
 </item>
 </channel></rss>""",
 }
@@ -156,7 +156,7 @@ def _register_all(m):
     m.get("https://airdropalert.com/robots.txt", text=ROBOTS, status_code=200)
     m.get(WP_API, text=WP_BODY, status_code=200)
 
-    # Wallet RPC: health, balance (1.5 SOL), token accounts (1 account).
+    # Wallet RPC: health, balance, token accounts, finalized signature history.
     m.post(
         "https://rpc.e2e.example",
         [
@@ -192,6 +192,7 @@ def _register_all(m):
                 },
                 "status_code": 200,
             },
+            {"json": {"jsonrpc": "2.0", "id": 1, "result": []}, "status_code": 200},
         ],
     )
 
@@ -258,17 +259,21 @@ def test_first_run_discovers_classifies_and_notifies(monkeypatch):
 
     # State carries notification history for the next run.
     state = json.loads(Path("dedup_state.json").read_text(encoding="utf-8"))
-    assert state["version"] == "1.3"
+    assert state["version"] == "1.4"
     assert state["seen"]
     assert state["notifications"]
     assert state["runs"] == 1
     assert report["state_source"] == "run:previous"
+    assert report["quest_queue"]
+    assert any(q["status"] == "NEEDS_APPROVAL" for q in report["quest_queue"].values())
+    assert report["reward_tracking"]["actual_rewards_received"] == []
+    assert any(a["adapter"] == "galxe" and a["status"] == "AUTH_REQUIRED" for a in report["quest_adapters"])
 
     # The dangerous words never appear in the delivered Telegram payload.
     sent = [c.text for c in m.request_history if "sendMessage" in str(c.url)]
     assert sent
     joined = "\n".join(sent)
-    assert "LUMAVUN Crypto Agent V1.3" in joined
+    assert "LUMAVUN Crypto Agent V1.4" in joined
     assert "CONFIRMED_AIRDROP" in joined
     assert "Zero-capital" in joined
 
@@ -318,7 +323,7 @@ def test_report_markdown_is_readable_and_labels_heuristics(monkeypatch):
         assert _run_main(monkeypatch) == 0
 
     text = Path("latest_report.md").read_text(encoding="utf-8")
-    assert "# LUMAVUN Crypto Agent V1.3" in text
+    assert "# LUMAVUN Crypto Agent V1.4" in text
     assert "## Kesehatan sumber" in text
     assert "## Ringkasan tipe peluang" in text
     assert "## Filter zero-capital" in text

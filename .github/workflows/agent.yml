@@ -1,6 +1,21 @@
-name: LUMAVUN Crypto Agent V1.3
+name: LUMAVUN Crypto Agent V1.4
 on:
   workflow_dispatch:
+    inputs:
+      queue_action:
+        description: Record a human task decision (never executes the task)
+        type: choice
+        options: [none, approve, complete]
+        default: none
+      quest_id:
+        description: Quest ID from the latest report
+        required: false
+      task_id:
+        description: Task ID from the latest report
+        required: false
+      task_evidence:
+        description: Human approval or completion note (no personal data or secrets)
+        required: false
   schedule:
     - cron: '17 1,13 * * *'
 permissions:
@@ -84,6 +99,15 @@ jobs:
             echo "state_source=run:$PREV-failed" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Record human task decision
+        if: github.event_name == 'workflow_dispatch' && inputs.queue_action != 'none' && inputs.queue_action != ''
+        env:
+          QUEST_ACTION: ${{ inputs.queue_action }}
+          QUEST_ID: ${{ inputs.quest_id }}
+          TASK_ID: ${{ inputs.task_id }}
+          TASK_EVIDENCE: ${{ inputs.task_evidence }}
+        run: python scripts/quest_queue.py "$QUEST_ACTION" --quest "$QUEST_ID" --task "$TASK_ID" --evidence "$TASK_EVIDENCE"
+
       - name: Run agent
         id: run
         run: python src/main.py
@@ -95,6 +119,7 @@ jobs:
           SOLANA_RPC_FALLBACK_URLS: ${{ vars.SOLANA_RPC_FALLBACK_URLS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GALXE_ACCESS_TOKEN: ${{ secrets.GALXE_ACCESS_TOKEN }}
 
       # Reports and state are uploaded even when the agent fails, so a broken
       # run still leaves diagnostics behind.

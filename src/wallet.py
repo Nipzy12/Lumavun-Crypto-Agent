@@ -124,7 +124,7 @@ def get_sol_balance(
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "getBalance",
-                "params": [address.strip()],
+                "params": [address.strip(), {"commitment": "finalized"}],
             },
             timeout=timeout,
         )
@@ -227,7 +227,7 @@ def query_token_accounts(
                 "params": [
                     address.strip(),
                     {"programId": TOKEN_PROGRAM_ID},
-                    {"encoding": "jsonParsed"},
+                    {"encoding": "jsonParsed", "commitment": "finalized"},
                 ],
             },
             timeout=timeout,

@@ -79,6 +79,10 @@ ELIGIBILITY_SIGNALS = (
 )
 
 TASK_SIGNALS = (
+    "read",
+    "review",
+    "monitor",
+    "check public",
     "follow",
     "join",
     "connect wallet",

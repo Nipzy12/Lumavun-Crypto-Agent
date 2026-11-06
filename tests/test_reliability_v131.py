@@ -85,7 +85,7 @@ def test_spl_rpc_exact_parameters_and_empty_wallet(requests_mock):
     assert query_token_accounts(ADDRESS, RPC) == ([], None)
     payload = requests_mock.last_request.json()
     assert payload['method'] == 'getTokenAccountsByOwner'
-    assert payload['params'] == [ADDRESS, {'programId': 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'}, {'encoding': 'jsonParsed'}]
+    assert payload['params'] == [ADDRESS, {'programId': 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'}, {'encoding': 'jsonParsed', 'commitment': 'finalized'}]
 
 
 def test_spl_valid_parsed_account(requests_mock):
@@ -118,7 +118,7 @@ def test_notification_partial_failure_retry_and_daily_dedup(monkeypatch, tmp_pat
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv('TELEGRAM_BOT_TOKEN', 'test-token')
     monkeypatch.setenv('TELEGRAM_CHAT_ID', 'test-chat')
-    campaigns = [Campaign('Campaign '+str(i), 'Meta', 'https://meta.example/campaign/'+str(i), 'https://meta.example/feed', evidence_verified=True, opportunity_type='POINTS_PROGRAM', zero_capital_ok=True, cost_status='PASS', official_url='https://meta.example/campaign/'+str(i)) for i in range(2)]
+    campaigns = [Campaign('Campaign '+str(i), 'Meta', 'https://meta.example/campaign/'+str(i), 'https://meta.example/feed', evidence_verified=True, raw_summary='Open to everyone.', tasks=['Follow the official account'], opportunity_type='POINTS_PROGRAM', zero_capital_ok=True, cost_status='PASS', official_url='https://meta.example/campaign/'+str(i)) for i in range(2)]
     monkeypatch.setattr(main, 'scan_sources', lambda *a, **kw: (campaigns, [], []))
     monkeypatch.setattr(main, 'read_wallet', lambda *a: {})
     calls = []

@@ -1,0 +1,28 @@
+# V1.4: no unverified integration is enabled by default.
+# Existing official project feeds remain in vetted_sources.yaml.
+galxe:
+  enabled: false
+  # Requires an operator-owned authorized GALXE_ACCESS_TOKEN (optional secret).
+  # Schema verified against official documentation on 2026-11-06.
+  documentation_url: https://docs.galxe.com/galxe-integration/api-reference/quest
+  quests: []  # Each entry: {id: documented-quest-id, official_url: supplied-official-url, reviewed: true}
+  eligibility_checks: false
+  eligibility_address: ""  # Public address only; explicit opt-in to the read-only query.
+
+# Add only feeds whose public use and project ownership have been reviewed.
+# Entry fields: id, url, documentation_url, reviewed_public_access: true.
+public_feeds: []
+
+# Select specific official URLs corroborated by an existing feed.
+# Entry fields: official_url, official_feed_id (from the source registry).
+manual_campaigns: []
+
+# Unknown platforms report UNSUPPORTED and never trigger network calls.
+other_platforms: []
+
+reward_tracking:
+  # Incoming assets are unverified by default; no prices or USD estimates.
+  trusted_mints: []
+  # Explicit attribution additionally requires a positive finalized transaction delta.
+  # Entry: signature, asset (mint or SOL), quest_id, evidence_url, reviewed: true.
+  attributions: []

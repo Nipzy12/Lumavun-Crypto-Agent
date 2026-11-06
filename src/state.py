@@ -40,7 +40,7 @@ ARTIFACT_NAME = "dedup_state"
 STATE_FILENAME = "dedup_state.json"
 CORRUPT_FILENAME = "dedup_state.corrupt.json"
 LOCK_FILENAME = "dedup_state.lock"
-STATE_VERSION = "1.3"
+STATE_VERSION = "1.4"
 MAX_ENTRIES = 200
 STALE_DAYS = 7
 LOCK_TIMEOUT_SECONDS = 30.0
@@ -60,6 +60,8 @@ def default_state() -> Dict[str, Any]:
         "runs": 0,
         "seen": {},
         "notifications": {},
+        "quest_queue": {},
+        "reward_wallets": {},
     }
 
 
@@ -116,6 +118,8 @@ def _sanitize_state(data: Any) -> Dict[str, Any]:
         "runs": 0,
         "seen": {},
         "notifications": {},
+        "quest_queue": {},
+        "reward_wallets": {},
     }
     runs = data.get("runs", 0)
     if isinstance(runs, int) and runs >= 0:
@@ -145,6 +149,9 @@ def _sanitize_state(data: Any) -> Dict[str, Any]:
                     if isinstance(k, str) and isinstance(v, (str, int, float, bool))
                 }
 
+    from persistence_v14 import clean_queue, clean_wallets
+    clean["quest_queue"] = clean_queue(data.get("quest_queue"))
+    clean["reward_wallets"] = clean_wallets(data.get("reward_wallets"))
     return clean
 
 
@@ -214,6 +221,8 @@ def merge_states(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]
         )
         notifications = dict(ordered[-_MAX_NOTIFICATIONS:])
     merged["notifications"] = notifications
+    from persistence_v14 import merge_extensions
+    merged.update(merge_extensions(base, update))
     return merged
 
 

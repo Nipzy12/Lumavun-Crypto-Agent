@@ -1,5 +1,5 @@
 """
-Telegram notification engine (V1.3.1).
+Telegram notification engine (V1.4).
 
 Sends an Indonesian daily summary plus one block per newly discovered
 opportunity. Each block answers the questions a reader actually needs:
@@ -250,6 +250,9 @@ def _fmt_risk(item: Dict[str, Any]) -> List[str]:
 
 def build_opportunity_block(campaign: Dict[str, Any], index: int) -> str:
     """One readable block for a single opportunity."""
+    quest = campaign.get("quest") or {}
+    if quest:
+        campaign = {**campaign, "deadline": quest.get("end_at"), "tasks": [t["text"] + " [" + t["status"] + "]" for t in quest.get("tasks", {}).values()]}
     title = str(campaign.get("title") or "Tanpa judul")[:90]
     project = str(campaign.get("project") or "").strip()
     opp_type = str(campaign.get("opportunity_type") or "UNVERIFIED")
@@ -260,6 +263,9 @@ def build_opportunity_block(campaign: Dict[str, Any], index: int) -> str:
         heading = f"{index}. {project} - {title}"
 
     lines: List[str] = [heading]
+    if quest:
+        lines.append("   Status tugas: " + quest.get("status", "DISCOVERED"))
+        lines.append("   Hadiah dijamin: " + ("tidak" if quest.get("reward_guaranteed") is False else "belum terverifikasi"))
     lines.append(f"   Proyek: {project or chr(45)}")
     lines.append(f"   Tipe: {TYPE_LABELS.get(opp_type, opp_type)}")
     if reason:
@@ -325,6 +331,8 @@ def build_daily_summary(
     errors: Sequence[str],
     total_found: Any = None,
     duplicates_skipped: int = 0,
+    quest_summary: Dict[str, Any] | None = None,
+    reward_summary: Dict[str, Any] | None = None,
 ) -> str:
     """A concise summary that is sent even when nothing new was found."""
     sources = [_as_mapping(s) for s in source_health]
@@ -350,8 +358,16 @@ def build_daily_summary(
     total = total_found if total_found is not None else new_count
 
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.3.1 - ringkasan harian")
+    lines.append("LUMAVUN Crypto Agent V1.4 - ringkasan harian")
     lines.append(f"Scan: {scan_time}")
+    if quest_summary is not None:
+        lines.append(f"Quest baru terverifikasi: {quest_summary.get('new_verified_quests', 0)} | menunggu persetujuan: {quest_summary.get('pending_approvals', 0)}")
+        lines.append(f"Tugas selesai: {quest_summary.get('completed_tasks', 0)} | kampanye ditolak: {quest_summary.get('rejected_campaigns', 0)} | kedaluwarsa: {quest_summary.get('expired_quests', 0)}")
+        received = (reward_summary or {}).get("actual_rewards_received", [])
+        lines.append(f"Reward diterima dengan atribusi terverifikasi (kumulatif): {len(received)}")
+        for receipt in received[-3:]:
+            lines.append(f"  {receipt['amount']} {receipt['asset']} | tx {receipt.get('signature', '-')}")
+        lines.append("Token masuk tanpa atribusi dan poin yang dijanjikan tidak dihitung sebagai pendapatan.")
     lines.append(f"Berita ditolak: {rejected} | peluang terverifikasi tanpa biaya: {verified} | errors: {len(errors)}")
     lines.append("")
     lines.append(_fmt_sol(wallet_summary))
@@ -492,7 +508,7 @@ def build_report_message(
     richer output lives in :func:`build_messages`.
     """
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.3.1")
+    lines.append("LUMAVUN Crypto Agent V1.4")
     lines.append("")
     lines.append(f"Waktu scan: {scan_time}")
     lines.append("")

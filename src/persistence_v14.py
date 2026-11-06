@@ -1,0 +1,126 @@
+"""Validate and merge V1.4 extensions inside the existing dedup artifact."""
+from __future__ import annotations
+
+from copy import deepcopy
+from decimal import Decimal, InvalidOperation
+
+from quests import STATES
+
+QUEST_FIELDS = {
+    'id', 'project', 'name', 'official_url', 'source', 'evidence_verified', 'evidence',
+    'source_verification_status', 'start_at', 'end_at', 'tasks', 'reward_type', 'reward_status',
+    'reward_guaranteed', 'reward_evidence', 'networks', 'wallet_requirements', 'mandatory_fees',
+    'cost_status', 'cost_evidence', 'eligibility_restrictions', 'eligibility_status',
+    'eligibility_evidence', 'risk_indicators', 'risk_explanation', 'risk_band', 'campaign_type',
+    'platform_status', 'status', 'verified_at', 'first_seen', 'updated_at', 'last_observed', 'terms_hash',
+}
+TASK_FIELDS = {'id', 'text', 'approval_reasons', 'status', 'approval', 'completion'}
+EVENT_FIELDS = {'asset', 'amount', 'observed_at', 'evidence', 'attribution', 'signature', 'slot', 'block_time', 'quest_id', 'attribution_evidence'}
+
+
+def _json(value, depth=0):
+    if depth > 8:
+        return None
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        return value if abs(value) != float('inf') and value == value else None
+    if isinstance(value, list):
+        return [_json(v, depth + 1) for v in value[:1000]]
+    if isinstance(value, dict):
+        return {k: _json(v, depth + 1) for k, v in value.items() if isinstance(k, str)}
+    return None
+
+
+def _proof(value, kind):
+    if not isinstance(value, dict) or value.get('kind') != kind or not isinstance(value.get('evidence'), str) or not isinstance(value.get('at'), str):
+        return None
+    return {key: value[key] for key in ('kind', 'at', 'evidence')}
+
+
+def clean_queue(value):
+    result = {}
+    if not isinstance(value, dict):
+        return result
+    for ident, record in value.items():
+        if not isinstance(ident, str) or not isinstance(record, dict) or record.get('id') != ident or record.get('status') not in STATES or not isinstance(record.get('tasks'), dict):
+            continue
+        clean = {k: _json(v) for k, v in record.items() if k in QUEST_FIELDS}
+        clean.setdefault('updated_at', '')
+        clean.setdefault('reward_type', 'UNSPECIFIED')
+        clean.setdefault('reward_status', 'unspecified')
+        clean['evidence_verified'] = record.get('evidence_verified') is True
+        tasks = {}
+        for tid, task in record['tasks'].items():
+            if not isinstance(tid, str) or not isinstance(task, dict) or task.get('id') != tid or not isinstance(task.get('text'), str) or not isinstance(task.get('approval_reasons'), list):
+                continue
+            entry = {k: _json(v) for k, v in task.items() if k in TASK_FIELDS}
+            entry['approval'] = _proof(task.get('approval'), 'human_approval')
+            entry['completion'] = _proof(task.get('completion'), 'human_confirmation')
+            tasks[tid] = entry
+        clean['tasks'] = tasks
+        result[ident] = clean
+    return result
+
+
+def clean_wallets(value):
+    result = {}
+    if not isinstance(value, dict):
+        return result
+    for ident, record in value.items():
+        if not isinstance(ident, str) or not isinstance(record, dict):
+            continue
+        clean = {'assets': {}, 'events': {}, 'signatures': {}, 'token_baseline': record.get('token_baseline') is True, 'updated_at': str(record.get('updated_at', ''))}
+        for asset, observation in (record.get('assets') or {}).items() if isinstance(record.get('assets'), dict) else []:
+            try:
+                if isinstance(asset, str) and isinstance(observation, dict) and Decimal(str(observation.get('amount'))).is_finite():
+                    clean['assets'][asset] = {'amount': str(observation['amount']), 'at': str(observation.get('at', ''))}
+            except (InvalidOperation, ValueError):
+                pass
+        for eid, event in (record.get('events') or {}).items() if isinstance(record.get('events'), dict) else []:
+            try:
+                if isinstance(eid, str) and isinstance(event, dict) and isinstance(event.get('asset'), str) and Decimal(str(event.get('amount'))).is_finite() and isinstance(event.get('attribution'), str):
+                    clean['events'][eid] = {k: _json(v) for k, v in event.items() if k in EVENT_FIELDS}
+            except (InvalidOperation, ValueError):
+                pass
+        if isinstance(record.get('signatures'), dict):
+            clean['signatures'] = {k: v for k, v in record['signatures'].items() if isinstance(k, str) and isinstance(v, str)}
+        result[ident] = clean
+    return result
+
+
+def merge_extensions(base, update):
+    queue = clean_queue(base.get('quest_queue'))
+    for ident, record in clean_queue(update.get('quest_queue')).items():
+        old = queue.get(ident)
+        if not old:
+            queue[ident] = record
+            continue
+        winner, other = (record, old) if record['updated_at'] >= old['updated_at'] else (old, record)
+        winner = deepcopy(winner)
+        for tid, task in winner['tasks'].items():
+            previous = other['tasks'].get(tid, {})
+            for key in ('approval', 'completion'):
+                if key == 'approval' and winner.get('terms_hash') != other.get('terms_hash'):
+                    continue
+                candidates = [v for v in (task.get(key), previous.get(key)) if v]
+                if candidates:
+                    task[key] = max(candidates, key=lambda v: v['at'])
+        queue[ident] = winner
+    wallets = clean_wallets(base.get('reward_wallets'))
+    for ident, record in clean_wallets(update.get('reward_wallets')).items():
+        old = wallets.get(ident)
+        if not old:
+            wallets[ident] = record
+            continue
+        for asset, observation in record['assets'].items():
+            if observation['at'] >= old['assets'].get(asset, {}).get('at', ''):
+                old['assets'][asset] = observation
+        for eid, event in record['events'].items():
+            previous = old['events'].get(eid)
+            if not previous or previous.get('attribution') != 'CONFIRMED_QUEST_REWARD':
+                old['events'][eid] = event
+        old['signatures'].update(record['signatures'])
+        old['token_baseline'] |= record['token_baseline']
+        old['updated_at'] = max(old['updated_at'], record['updated_at'])
+    return {'quest_queue': queue, 'reward_wallets': wallets}

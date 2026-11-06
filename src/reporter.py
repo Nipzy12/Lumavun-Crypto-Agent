@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from discovery import Campaign, SourceHealth
 
-AGENT_VERSION = "1.3.1"
+AGENT_VERSION = "1.4"
 OPPORTUNITY_TYPES = (
     "CONFIRMED_AIRDROP",
     "POINTS_PROGRAM",
@@ -81,11 +81,17 @@ def build_report(
     duplicates_skipped: int = 0,
     total_found: Optional[int] = None,
     state_source: Optional[str] = None,
+    quest_queue: Optional[Dict[str, Any]] = None,
+    adapter_health: Optional[List[Dict[str, Any]]] = None,
+    reward_tracking: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the machine-readable report dict."""
     campaign_dicts = [_campaign_dict(c) for c in campaigns]
     return {
         "agent": f"LUMAVUN Crypto Agent V{AGENT_VERSION}",
+        "quest_queue": quest_queue or {},
+        "quest_adapters": adapter_health or [],
+        "reward_tracking": reward_tracking or {},
         "version": AGENT_VERSION,
         "scan_time_utc": scan_time,
         "state_source": state_source,
@@ -335,6 +341,23 @@ def write_markdown_report(report: Dict[str, Any], path: Optional[Path] = None) -
             + (f" - {c['cross_check_note']}" if c.get("cross_check_note") else "")
         )
         lines.append("")
+
+    lines.extend(["## Antrean quest V1.4", ""])
+    for quest in (report.get("quest_queue") or {}).values():
+        lines.append(f"- **{quest['name']}** — {quest['status']} | biaya {quest['cost_status']} | eligibility {quest['eligibility_status']}")
+        lines.append(f"  - {quest.get('official_url') or 'URL resmi belum terverifikasi'} | deadline {quest.get('end_at') or 'tidak disebutkan'}")
+        for task in quest.get("tasks", {}).values():
+            lines.append(f"  - [{task['status']}] {task['text']}")
+    lines.extend(["", "## Integrasi quest", ""])
+    for adapter in report.get("quest_adapters") or []:
+        lines.append(f"- {adapter['adapter']}: {adapter['status']} — {adapter['reason']}")
+    rewards = report.get("reward_tracking") or {}
+    lines.extend(["", "## Pelacakan reward read-only", ""])
+    lines.append(f"Status: {rewards.get('status', 'UNAVAILABLE')}; reward diterima dengan atribusi: {len(rewards.get('actual_rewards_received', []))}.")
+    lines.append("Token masuk, perubahan saldo, poin yang dijanjikan, dan reward terverifikasi dilaporkan terpisah; tidak ada estimasi USD.")
+    for event in rewards.get("actual_rewards_received", []):
+        lines.append(f"- {event['amount']} {event['asset']} | tx {event.get('signature', '-')} | quest {event.get('quest_id', '-')}")
+    lines.append("")
 
     lines.append("## Persyaratan umum")
     lines.append("")

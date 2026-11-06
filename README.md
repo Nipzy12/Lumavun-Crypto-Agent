@@ -1,8 +1,57 @@
-# LUMAVUN Crypto Agent V1.3.1
+# LUMAVUN Autonomous Crypto Agent V1.4
 
 A zero-capital airdrop intelligence system: it reads a registry of verified sources (RSS/Atom feeds and public JSON APIs), extracts campaigns with their evidence, classifies the opportunity, applies a zero-capital filter, scores explainable risk indicators, and sends actionable Telegram notifications. It also monitors a Phantom wallet's SOL and SPL balances read-only.
 
 **No guaranteed earnings. No automatic claiming, wallet signing, transactions, or trades.** Every report states this in plain words.
+
+## V1.4 — Quest Discovery & Zero-Capital Assistant
+
+V1.4 adds a persistent quest/task queue and read-only reward evidence to V1.3.1. It retains the evidence classifier, PASS/FAIL/UNKNOWN costs, Telegram delivery deduplication and Phantom monitoring. It never executes wallet transactions, claims, trades, account authorization or social actions.
+
+### Discovery and configuration
+
+`config/quest_sources.yaml` controls the optional integrations:
+
+- **Official project feeds:** existing vetted sources remain active. Additional public feeds need `id`, `url`, `documentation_url`, and `reviewed_public_access: true`; review the project's ownership and permitted public use first. The existing robots/rate-limit and evidence checks still apply.
+- **Galxe:** disabled by default. Official API documentation is verified; live authorized access remains **AUTH_REQUIRED** until configured. To enable, create your own server API token through the Galxe dashboard, store it securely as the optional GitHub Actions secret `GALXE_ACCESS_TOKEN`, set `galxe.enabled: true`, and supply reviewed quest `id` / `official_url` pairs. Never put the token in YAML or chat. Read-only eligibility queries additionally require `eligibility_checks: true` and a public `eligibility_address`. Gasless alone does not make a quest zero-capital.
+- **Manual URLs:** add `official_url` and `official_feed_id` under `manual_campaigns`. URLs are corroborated against an observed official-feed announcement; unsupported pages are reported rather than scraped.
+- **Other platforms:** use a reviewed public feed where offered. Unsupported platform names report UNSUPPORTED and make no requests to invented endpoints.
+
+No existing GitHub Secret or Variable changes meaning. No new dependency is required. Galxe credentials are optional and needed only for that authorized API.
+
+### Quest queue and human decisions
+
+Reports now contain project/quest, official URL, source evidence, dates, tasks, reward status, network, wallet requirements, fees, eligibility and risk. Unknown information stays unknown. Queue states are DISCOVERED, VERIFIED, READY, NEEDS_APPROVAL, COMPLETED, REJECTED and EXPIRED.
+
+READY requires verified evidence, PASS costs and checked eligibility. Wallet/account/social/personal-information/claim tasks require separate human approval. An unknown task is never implicitly authorized. Opening a URL is not completion. Observations older than 24 hours need refreshing before approval or completion.
+
+From the repository root, after activating your Python environment:
+
+```bash
+python scripts/quest_queue.py list
+python scripts/quest_queue.py approve --quest QUEST_ID --task TASK_ID --evidence 'Reviewed this specific task and its current terms'
+python scripts/quest_queue.py complete --quest QUEST_ID --task TASK_ID --evidence 'Manually completed and verified on the official platform'
+```
+
+These commands only record human decisions; they do not perform the task. Keep evidence notes free of personal information and secrets. For the scheduled deployment, use **Actions → Run workflow** with the optional `queue_action`, `quest_id`, `task_id`, and `task_evidence` inputs. The decision is applied to restored state and uploaded with the run. The default action is `none`. Local decisions affect the local state file, not GitHub's artifact automatically.
+
+Immediate Telegram alerts contain only current verified zero-capital opportunities whose queue status is READY or NEEDS_APPROVAL. One daily digest includes new verified quests, pending approvals, completed tasks, rejected campaigns and attributed received rewards. News remains a count, not an alert stream.
+
+### Read-only rewards
+
+The existing wallet monitor now requests finalized balances. The tracker records wallet-scoped baseline changes and recent finalized transaction identifiers. An incoming token is **not** automatically an airdrop. Unverified inflows, trusted received tokens, advertised off-chain points and speculative rewards are separate.
+
+Optional `reward_tracking.trusted_mints` identifies assets you have reviewed. Optional `attributions` require `signature`, `asset`, `quest_id`, `evidence_url` and `reviewed: true`; a positive finalized transaction observation must also exist before a quest reward is recorded. No fabricated entries ship with the repository. There is no USD earnings estimate.
+
+State is stored inside the existing `dedup_state.json` artifact and migrates from V1.3.1. The GitHub Actions schedule remains **09:17 and 21:17 WITA**. [Architecture, state rules, integration evidence and coverage limits](docs/architecture.md) describe the implementation in detail.
+
+### V1.4 validation
+
+`python -m pytest tests -q`: **399 passed, 0 failed** in the cloud environment on 2026-11-06 (15.23 seconds). The suite includes the V1.3.1 regressions and 79 additional deterministic tests for adapters, queue state/approvals, notifications and reward evidence. HTTP/RPC/Telegram fixtures are mocked and do not represent actual earnings. `python -m pip check` reported no broken requirements. Live deployment results are separate from these test results.
+
+### V1.4 limitations
+
+Galxe is not live-verified without an authorized token. Other platforms without a reviewed public feed/API adapter are unsupported. Text eligibility is deliberately conservative; restricted or unstated eligibility remains UNKNOWN. The reward tracker observes at most 20 recent finalized owner-address signatures per scan, may miss token-account-only activity, and retains classic SPL coverage. Off-chain points are advertised amounts/status, not confirmed earned balances. Human approval never enables an unrestricted executor.
 
 ## V1.3.1 reliability patch
 
@@ -176,7 +225,7 @@ pip install -r requirements-dev.txt
 python -m pytest tests -v
 ```
 
-Current suite: **281 passing tests** covering source layer (robots, rate limits, both transports, HTTP failures), analysis (classification, zero-capital, deadlines, rewards, risk scoring, cross-checking), risk tiers and their consistency with discovery, discovery and stable ids, state (corruption, concurrency, legacy V1.2 keys, notification history), notifications, wallet RPC behaviour, reports, the address-checker CLI, the workflow file structure, and an end-to-end double run of `main()`.
+V1.3 baseline suite: **281 passing tests** covering source layer (robots, rate limits, both transports, HTTP failures), analysis (classification, zero-capital, deadlines, rewards, risk scoring, cross-checking), risk tiers and their consistency with discovery, discovery and stable ids, state (corruption, concurrency, legacy V1.2 keys, notification history), notifications, wallet RPC behaviour, reports, the address-checker CLI, the workflow file structure, and an end-to-end double run of `main()`.
 
 A local run writes `latest_report.json`, `latest_report.md`, `dedup_state.json` and `source_health.json`. All are gitignored.
 

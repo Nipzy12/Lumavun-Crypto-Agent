@@ -104,6 +104,7 @@ class Campaign:
     evidence_verified: bool = False
     source_verification_status: str = "unverified"
     cost_status: str = "UNKNOWN"
+    quest_intelligence: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         # Every campaign identifies itself the moment it exists, so reports,
@@ -370,6 +371,8 @@ def _build_campaign(
         published_ts=item.published_ts,
     )
     campaign.campaign_id = campaign_id_for(campaign)
+    from quests import from_campaign
+    campaign.quest_intelligence = from_campaign(campaign, summary)
     return campaign
 
 

@@ -1,4 +1,4 @@
-"""V1.3 notification tests: opportunity blocks, daily summary, chunking.
+"""V1.4 notification tests: opportunity blocks, daily summary, chunking.
 
 The requirement is specific: every newly discovered opportunity must carry
 project, title, type, official source, required actions, reward status,
@@ -253,7 +253,7 @@ class TestChunking:
             source_health=HEALTH,
             errors=[],
         )
-        assert messages[0].startswith("LUMAVUN Crypto Agent V1.3.1 - ringkasan harian")
+        assert messages[0].startswith("LUMAVUN Crypto Agent V1.4 - ringkasan harian")
         assert all(len(m.encode("utf-8")) <= 4000 for m in messages)
         # Opportunity blocks are grouped, three per message.
         block_messages = messages[1:]
@@ -344,7 +344,7 @@ class TestLegacyMessage:
             source_health=HEALTH,
             errors=[],
         )
-        assert "LUMAVUN Crypto Agent V1.3" in msg
+        assert "LUMAVUN Crypto Agent V1.4" in msg
         assert "Meta Chain Airdrop" in msg
         assert "CONFIRMED_AIRDROP" in msg
         assert "Sumber feed: 2/2" in msg

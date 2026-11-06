@@ -41,6 +41,9 @@ from state import (
 )
 from telegram import send_messages, build_daily_summary, build_opportunity_block, chunk_message
 from wallet import read_wallet
+from quest_adapters import discover_quests, load_quest_config
+from quests import from_campaign, update_queue, queue_digest
+from rewards import update_rewards
 
 # Reports contain Indonesian text and status symbols. Force UTF-8 so a
 # non-UTF-8 console (for example a Windows cp1252 shell) cannot crash the run.
@@ -56,7 +59,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-AGENT_VERSION = "1.3.1"
+AGENT_VERSION = "1.4"
 
 
 def _env_list(name: str) -> List[str]:
@@ -124,7 +127,12 @@ def main() -> int:
         len(errors),
     )
 
+    quest_settings = load_quest_config()
+    campaigns, adapter_health = discover_quests(campaigns, source_health, config, quest_settings)
     state = load_state_from_artifact()
+    observed_quests = [c.quest_intelligence or from_campaign(c) for c in campaigns]
+    queue = update_queue(state, observed_quests)
+    quest_summary = queue_digest(queue, {q["id"] for q in observed_quests})
     state_source = os.getenv("LUMAVUN_STATE_SOURCE", "").strip() or "local"
     total_found = len(campaigns)
 
@@ -140,6 +148,7 @@ def main() -> int:
         campaign
         for campaign in {c.campaign_id: c for c in campaigns}.values()
         if campaign.evidence_verified and campaign.zero_capital_ok is True
+        and queue.get(campaign.campaign_id, {}).get("status") in ("READY", "NEEDS_APPROVAL")
         and not was_notified(state, campaign.campaign_id)
     ]
     logger.info(
@@ -165,6 +174,9 @@ def main() -> int:
                 "key (Base58, 32 bytes). SOL balance cannot be read."
             )
 
+    reward_tracking = update_rewards(state, wallet, os.getenv("PHANTOM_PUBLIC_ADDRESS", "").strip(), config=quest_settings.get("reward_tracking", {}))
+    errors.extend(reward_tracking.get("errors", []) if wallet.get("address_valid") else [])
+
     telegram_result: Optional[Dict[str, Any]] = None
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
@@ -174,10 +186,10 @@ def main() -> int:
         if not was_notified(state, summary_id):
             batches.append((summary_id, [build_daily_summary(
                 scan_time, wallet, [campaign_payload(c) for c in campaigns],
-                source_health, errors, total_found, len(duplicates_skipped)
+                source_health, errors, total_found, len(duplicates_skipped), quest_summary, reward_tracking
             )]))
         for campaign in to_notify:
-            batches.append((campaign.campaign_id, chunk_message(build_opportunity_block(campaign_payload(campaign), 1))))
+            batches.append((campaign.campaign_id, chunk_message(build_opportunity_block({**campaign_payload(campaign), "quest": queue.get(campaign.campaign_id)}, 1))))
         telegram_result = {"sent": True, "messages": 0, "sent_count": 0, "error": None}
         delivery_errors = []
         for ident, batch in batches:
@@ -193,7 +205,7 @@ def main() -> int:
         telegram_result["error"] = "; ".join(delivery_errors) or None
     else:
         logger.info("Telegram not configured; printing the summary only")
-        print(build_daily_summary(scan_time, wallet, [campaign_payload(c) for c in campaigns], source_health, errors, total_found, len(duplicates_skipped)))
+        print(build_daily_summary(scan_time, wallet, [campaign_payload(c) for c in campaigns], source_health, errors, total_found, len(duplicates_skipped), quest_summary, reward_tracking))
 
     mark_run(state)
     save_state_locally(state)
@@ -208,6 +220,7 @@ def main() -> int:
         duplicates_skipped=len(duplicates_skipped),
         total_found=total_found,
         state_source=state_source,
+        quest_queue=queue, adapter_health=adapter_health, reward_tracking=reward_tracking,
     )
     json_path = write_json_report(report)
     md_path = write_markdown_report(report)
