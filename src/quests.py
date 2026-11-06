@@ -80,7 +80,13 @@ def from_campaign(campaign, text: str = "", metadata: dict | None = None) -> dic
         guaranteed = False
     elif re.search(r"\b(?:guaranteed token rewards?|token rewards? (?:are|is) guaranteed)\b", text, re.I):
         guaranteed = True
+    gas_status, gas_evidence = None, None
+    if re.search(r"\b(?:gas fee required|you pay gas|must pay gas|gas is not free)\b", text, re.I) and not re.search(r"\bno gas fees? required\b", text, re.I):
+        gas_status, gas_evidence = "FAIL", "Official text explicitly requires paid gas"
+    elif re.search(r"\b(?:gasless|sponsored gas|gas is free|no gas fees?)\b", text, re.I) and not re.search(r"\b(?:not|never) gasless\b", text, re.I):
+        gas_status, gas_evidence = "PASS", "Official text explicitly states gasless or sponsored gas"
     record = {
+        "gas_status": gas_status, "gas_evidence": gas_evidence,
         "id": campaign.campaign_id, "project": campaign.project, "name": campaign.title,
         "official_url": campaign.official_url, "source": campaign.source,
         "announcement_url": campaign.announcement_url or campaign.url,

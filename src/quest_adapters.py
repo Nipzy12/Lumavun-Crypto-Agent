@@ -178,6 +178,8 @@ def galxe_discover(settings: dict, config: dict, session=requests) -> tuple[list
                 metadata["eligibility_status"] = eligibility_from_groups(eligibility.get("credentialGroups"))
                 metadata["eligibility_evidence"] = "Authorized credentialGroups query; all group conditions checked"
         campaign.quest_intelligence = from_campaign(campaign, text, metadata)
+        campaign.quest_intelligence['gas_status'] = 'PASS' if data.get('gasType') == 'Gasless' else 'FAIL' if data.get('gasType') == 'Gas' else 'UNKNOWN'
+        campaign.quest_intelligence['gas_evidence'] = 'Authorized API gasType=' + str(data.get('gasType'))
         campaigns.append(campaign)
         diagnostics.append(status("galxe", "OK", "Documented quest query verified at runtime", quest_id=ident))
     return campaigns, diagnostics

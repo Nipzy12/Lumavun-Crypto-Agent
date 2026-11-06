@@ -66,11 +66,16 @@ def qualify(record, now=None):
     field('reward_type', 'PASS' if official and reward not in ('UNKNOWN_REWARD', 'SPECULATIVE_AIRDROP') else 'UNKNOWN', reward + ': ' + str(record.get('reward_evidence') or 'Missing explicit reward evidence'))
     # Conditional terms can be transparent without a guaranteed payout.
     certainty = record.get('reward_guaranteed')
-    transparent = reward in ('POINTS_ONLY', 'EDUCATIONAL_BADGE') or (reward in ('CONFIRMED_TOKEN_REWARD', 'CONDITIONAL_TOKEN_REWARD') and isinstance(certainty, bool))
-    field('reward_certainty', 'PASS' if official and transparent else 'UNKNOWN', 'Non-income achievement/points only' if reward in ('POINTS_ONLY', 'EDUCATIONAL_BADGE') else 'Guaranteed program terms' if certainty is True else 'Conditional; payout not guaranteed' if certainty is False else 'Reward conditions or certainty not established')
+    transparent = reward not in ('UNKNOWN_REWARD', 'SPECULATIVE_AIRDROP') and isinstance(certainty, bool)
+    field('reward_certainty', 'PASS' if official and transparent else 'UNKNOWN', 'Guaranteed program terms' if certainty is True else 'Conditional; payout not guaranteed' if certainty is False else 'Reward conditions or certainty not established')
     cost = record.get('cost_status')
-    for name in ('mandatory_fees', 'gas_costs'):
-        field(name, 'FAIL' if cost == 'FAIL' else 'PASS' if official and cost == 'PASS' and record.get('cost_evidence') else 'UNKNOWN', str(record.get('cost_evidence') or 'Mandatory participation and claim fees are unknown'))
+    field('mandatory_fees', 'FAIL' if cost == 'FAIL' else 'PASS' if official and cost == 'PASS' and record.get('cost_evidence') else 'UNKNOWN', str(record.get('cost_evidence') or 'Mandatory participation and claim fees are unknown'))
+    gas = record.get('gas_status')
+    if gas in ('PASS', 'FAIL') and not record.get('gas_evidence'):
+        gas = 'UNKNOWN'
+    if gas not in ('PASS', 'FAIL', 'UNKNOWN'):
+        gas = 'PASS' if cost == 'PASS' and record.get('cost_evidence') else 'UNKNOWN'
+    field('gas_costs', gas if gas == 'FAIL' or official else 'UNKNOWN', str(record.get('gas_evidence') or record.get('cost_evidence') if gas == 'PASS' else record.get('gas_evidence') or 'Gas payment requirements are not established'))
     eligibility = record.get('eligibility_status')
     restriction_text = str(record.get('eligibility_text') or '')
     for name in ('geographic_eligibility', 'account_eligibility'):

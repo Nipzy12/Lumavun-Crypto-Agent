@@ -118,7 +118,7 @@ def test_notification_partial_failure_retry_and_daily_dedup(monkeypatch, tmp_pat
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv('TELEGRAM_BOT_TOKEN', 'test-token')
     monkeypatch.setenv('TELEGRAM_CHAT_ID', 'test-chat')
-    campaigns = [Campaign('Campaign '+str(i), 'Meta', 'https://meta.example/campaign/'+str(i), 'https://meta.example/feed', evidence_verified=True, raw_summary='Open to everyone. Starts on 2020-01-01.', deadline='2099-12-01', source_verification_status='official_feed', zero_capital_reason='Explicit free participation', reward_text='Earn points for participation', tasks=['Follow the official account'], opportunity_type='POINTS_PROGRAM', zero_capital_ok=True, cost_status='PASS', official_url='https://meta.example/campaign/'+str(i)) for i in range(2)]
+    campaigns = [Campaign('Campaign '+str(i), 'Meta', 'https://meta.example/campaign/'+str(i), 'https://meta.example/feed', evidence_verified=True, raw_summary='Open to everyone. Starts on 2020-01-01. Rewards are not guaranteed.', deadline='2099-12-01', source_verification_status='official_feed', zero_capital_reason='Explicit free participation', reward_text='Earn points for participation', tasks=['Follow the official account'], opportunity_type='POINTS_PROGRAM', zero_capital_ok=True, cost_status='PASS', official_url='https://meta.example/campaign/'+str(i)) for i in range(2)]
     monkeypatch.setattr(main, 'scan_sources', lambda *a, **kw: (campaigns, [], []))
     monkeypatch.setattr(main, 'read_wallet', lambda *a: {})
     calls = []

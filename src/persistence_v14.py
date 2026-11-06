@@ -13,7 +13,7 @@ QUEST_FIELDS = {
     'cost_status', 'cost_evidence', 'eligibility_restrictions', 'eligibility_status',
     'eligibility_evidence', 'risk_indicators', 'risk_explanation', 'risk_band', 'campaign_type',
     'announcement_url', 'evidence_checks', 'reasons', 'human_review',
-    'qualification', 'qualification_schema', 'review_history', 'eligibility_text', 'task_archive',
+    'qualification', 'qualification_schema', 'review_history', 'eligibility_text', 'task_archive', 'gas_status', 'gas_evidence',
     'platform_status', 'status', 'verified_at', 'first_seen', 'updated_at', 'last_observed', 'terms_hash',
 }
 TASK_FIELDS = {'id', 'text', 'approval_reasons', 'status', 'approval', 'completion'}

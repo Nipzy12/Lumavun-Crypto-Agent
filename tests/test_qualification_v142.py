@@ -32,7 +32,7 @@ def test_independent_fields_and_deterministic_score():
 @pytest.mark.parametrize('changes,field,status', [
     ({'reward_evidence': ''}, 'reward_type', 'UNKNOWN'),
     ({'cost_status': 'UNKNOWN'}, 'mandatory_fees', 'UNKNOWN'),
-    ({'cost_status': 'FAIL'}, 'gas_costs', 'FAIL'),
+    ({'cost_status': 'FAIL'}, 'mandatory_fees', 'FAIL'),
     ({'eligibility_text': 'Open to everyone. US only.'}, 'geographic_eligibility', 'UNKNOWN'),
     ({'eligibility_text': 'Verified account required. KYC required.'}, 'account_eligibility', 'UNKNOWN'),
     ({'eligibility_status': 'FAIL'}, 'account_eligibility', 'FAIL'),
@@ -203,3 +203,33 @@ def test_digest_remains_one_compact_message():
         groups[name] = [{**item, 'name': '長'*300, 'official_url':'https://example.test/'+'x'*3000}]
     text = build_daily_summary('now', {}, [], [], ['x'*1000]*3, quest_summary={'shortlist':groups})
     assert len(text.encode('utf-8')) <= 3800
+
+
+def test_gas_sponsorship_cannot_approve_unknown_mandatory_fees():
+    q, _ = qualified(cost_status='UNKNOWN', gas_status='PASS', gas_evidence='Explicit sponsored gas')
+    assert q['qualification']['fields']['gas_costs']['status'] == 'PASS'
+    assert q['qualification']['fields']['mandatory_fees']['status'] == 'UNKNOWN'
+    assert q['qualification']['status'] == 'REVIEW_REQUIRED'
+
+
+def test_deposit_does_not_prove_paid_gas():
+    q, _ = qualified(cost_status='FAIL')
+    assert q['qualification']['fields']['gas_costs']['status'] == 'UNKNOWN'
+    assert q['qualification']['status'] == 'BLOCKED'
+
+
+def test_badge_type_does_not_establish_reward_certainty():
+    q, _ = qualified(reward_type='EDUCATIONAL_BADGE', campaign_type='FREE_QUEST', reward_evidence='Badge 1', reward_guaranteed=None)
+    assert q['qualification']['fields']['reward_type']['status'] == 'PASS'
+    assert q['qualification']['fields']['reward_certainty']['status'] == 'UNKNOWN'
+
+
+def test_negated_gas_payment_is_not_a_failure():
+    from test_quests_v14 import quest, TEXT
+    q = quest(TEXT + ' No gas fee required.')
+    assert q['gas_status'] == 'PASS'
+
+
+def test_gas_status_without_evidence_is_unknown():
+    q, _ = qualified(gas_status='PASS', gas_evidence=None)
+    assert q['qualification']['fields']['gas_costs']['status'] == 'UNKNOWN'
