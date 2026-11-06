@@ -38,7 +38,33 @@ default_feeds:
 #     news -> general crypto newsroom
 # ---------------------------------------------------------------------------
 sources:
+  - id: optimism-foundation-missions
+    source_class: CAMPAIGN
+    organizer: Optimism Collective
+    label: "Optimism Foundation Mission Requests — official public GitHub API"
+    url: "https://api.github.com/repos/ethereum-optimism/ecosystem-contributions/issues?state=open&labels=Foundation%20Mission%20Request&per_page=30"
+    kind: json
+    parser: optimism_missions
+    category: official_project
+    official: true
+    enabled: true
+    onboarding:
+      status: APPROVED
+      endpoint: "https://api.github.com/repos/ethereum-optimism/ecosystem-contributions/issues?state=open&labels=Foundation%20Mission%20Request&per_page=30"
+      expected_parser: optimism_missions
+      ownership_url: "https://github.com/ethereum-optimism/ecosystem-contributions"
+      documentation_url: "https://docs.github.com/en/rest/issues/issues"
+      permission_url: "https://docs.github.com/en/site-policy/github-terms/github-terms-of-service"
+      verified_at: "2026-11-06"
+      fixture: "tests/fixtures/optimism_missions.json"
+      fixture_sha256: "926e071acd07ce01d412895aeab6dd7345be4f041c4fea40e0194ba944bbbb77"
+    notes: >
+      Verified GitHub organization links optimism.io. The repository README points
+      to the curated Foundation Mission Request label for proactive grants.
+      Open issue does not establish current availability; selection and payout
+      remain conditional. No account creation, engagement or submissions performed.
   - id: bankless-academy-lessons
+    source_class: EDUCATION
     label: "Bankless Academy — official public lesson quests"
     url: "https://app.banklessacademy.com/api/lessons"
     kind: json
@@ -51,6 +77,7 @@ sources:
       Published lessons with quest components only. Badge rewards are educational,
       not income. Fees and eligibility remain UNKNOWN. See docs/source-review-v141.md.
   - id: airdropalert-rss
+    source_class: MIXED
     label: "AirdropAlert — campaign listing feed (RSS)"
     url: "https://airdropalert.com/feed/rssfeed"
     kind: rss
@@ -65,6 +92,7 @@ sources:
       stripped from every link before it is used or reported.
 
   - id: airdrops-io-rss
+    source_class: MIXED
     label: "airdrops.io — guides, points and testnet write-ups (RSS)"
     url: "https://airdrops.io/feed/"
     kind: rss
@@ -77,6 +105,7 @@ sources:
       normal. Long-form entry bodies are used for task and reward extraction.
 
   - id: airdropalert-api
+    source_class: MIXED
     label: "AirdropAlert — public WordPress REST API (JSON)"
     url: "https://airdropalert.com/wp-json/wp/v2/posts?per_page=10&_fields=id,date_gmt,link,title,excerpt"
     kind: json
@@ -93,6 +122,7 @@ sources:
       failure.
 
   - id: decrypt-rss
+    source_class: NEWS
     label: "Decrypt — crypto newsroom (RSS)"
     url: "https://decrypt.co/feed"
     kind: rss
@@ -107,8 +137,9 @@ sources:
       because it has been part of the agent since V1.1.
 
   - id: ethereum-blog-rss
+    source_class: MIXED
     label: "Ethereum Foundation blog — official announcements (RSS)"
-    url: "https://blog.ethereum.org/feed.xml"
+    url: "https://blog.ethereum.org/en/feed.xml"
     kind: rss
     parser: feed
     category: official_project
@@ -121,8 +152,9 @@ sources:
       reward promises.
 
   - id: arbitrum-blog-rss
+    source_class: MIXED
     label: "Arbitrum blog — official announcements (RSS)"
-    url: "https://blog.arbitrum.io/feed"
+    url: "https://blog.arbitrum.io/rss/"
     kind: rss
     parser: feed
     category: official_project
@@ -140,6 +172,13 @@ sources:
 # estimates.
 # ---------------------------------------------------------------------------
 verified_sources:
+  - url: "https://api.github.com/repos/ethereum-optimism/ecosystem-contributions/issues?state=open&labels=Foundation%20Mission%20Request&per_page=30"
+    http_status: 200
+    content_type: application/json
+    feed_format: "Documented GitHub REST repository issue array"
+    entries_at_check: 9
+    focus: "Official labeled Foundation Mission grant requests; current eligibility unproven"
+    notes: "Checked without credentials on 2026-11-06. Repository README and verified organization establish provenance."
   - url: https://app.banklessacademy.com/api/lessons
     http_status: 200
     content_type: application/json
@@ -198,7 +237,7 @@ verified_sources:
     notes: >
       General newsroom feed; kept for continuity from V1.1/V1.2.
 
-  - url: https://blog.ethereum.org/feed.xml
+  - url: https://blog.ethereum.org/en/feed.xml
     http_status: 200
     content_type: application/xml
     feed_format: RSS 2.0
@@ -210,7 +249,7 @@ verified_sources:
       First-party source. Used for corroborating third-party listing claims
       and for testnet announcements.
 
-  - url: https://blog.arbitrum.io/feed
+  - url: https://blog.arbitrum.io/rss/
     http_status: 200
     content_type: application/rss+xml
     feed_format: RSS 2.0
@@ -560,6 +599,7 @@ zero_capital:
     - no gas
     - gas is free
     - sponsored gas
+    - gas is sponsored
     - free gas
     - faucet
   # Off-chain actions that cost nothing.

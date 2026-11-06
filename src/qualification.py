@@ -53,7 +53,9 @@ def qualify(record, now=None):
     bound = safe_url(announcement) and sanitize_url(announcement) == sanitize_url(url)
     same_host = valid and bound and urlsplit(url).hostname == urlsplit(source).hostname
     galxe = valid and trusted == 'authorized_galxe_api' and urlsplit(url).hostname == 'app.galxe.com' and urlsplit(source).hostname == 'graphigo-business.prd.galaxy.eco'
-    official = bool(valid and (trusted == 'official_feed' and same_host or galxe))
+    from campaign_sources import optimism_binding
+    mission = trusted == "official_campaign_api" and bound and optimism_binding(source, url)
+    official = bool(valid and (trusted == 'official_feed' and same_host or galxe or mission))
     fields = {}
     def field(name, status, explanation, evidence_url=None):
         fields[name] = {'status': status, 'evidence_url': evidence_url if safe_url(evidence_url) else (url if official else source if safe_url(source) else None),

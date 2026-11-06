@@ -104,6 +104,10 @@ class SourceSpec:
     official: bool = False
     enabled: bool = True
     notes: str = ""
+    source_class: str = "MIXED"
+    organizer: str = ""
+    onboarding: dict = field(default_factory=dict)
+    require_onboarding: bool = False
 
 
 @dataclass
@@ -213,14 +217,19 @@ class RobotsRules:
 
     def allows(self, path: str) -> bool:
         target = path or "/"
+        def matches(pattern):
+            regex = re.escape(pattern).replace(r"\*", ".*")
+            if regex.endswith(r"\$"):
+                regex = regex[:-2] + "$"
+            return re.match("^" + regex, target) is not None
         best_len = -1
         best_allow = True
         for prefix in self.disallow:
-            if prefix and target.startswith(prefix) and len(prefix) > best_len:
+            if prefix and matches(prefix) and len(prefix) > best_len:
                 best_len = len(prefix)
                 best_allow = False
         for prefix in self.allow:
-            if prefix and target.startswith(prefix) and len(prefix) >= best_len:
+            if prefix and matches(prefix) and len(prefix) >= best_len:
                 best_len = len(prefix)
                 best_allow = True
         return best_allow
@@ -280,16 +289,35 @@ def fetch_robots(origin: str, user_agent: str, timeout: int = DEFAULT_TIMEOUT) -
     if origin in _ROBOTS_CACHE:
         return _ROBOTS_CACHE[origin]
     _ROBOTS_FETCHED.add(origin)
+    from source_security import check_source_destination
+    if not check_source_destination(origin.rstrip('/') + '/robots.txt'):
+        return RobotsRules(disallow=['/'])
     try:
         resp = requests.get(
             origin.rstrip("/") + "/robots.txt",
             timeout=timeout,
             headers={"User-Agent": user_agent},
+            allow_redirects=False, stream=True,
         )
+        if resp.status_code in (401,403,429) or 300 <= resp.status_code < 400 or resp.status_code >= 500:
+            resp.close()
+            _ROBOTS_CACHE[origin] = RobotsRules(disallow=['/'])
+            return _ROBOTS_CACHE[origin]
         if resp.status_code != 200:
+            resp.close()
             _ROBOTS_CACHE[origin] = None
             return None
-        rules = parse_robots(resp.text, user_agent)
+        parts, size = [], 0
+        try:
+            for chunk in resp.iter_content(chunk_size=8192):
+                size += len(chunk)
+                if size > 65536:
+                    _ROBOTS_CACHE[origin] = RobotsRules(disallow=['/'])
+                    return _ROBOTS_CACHE[origin]
+                parts.append(chunk)
+        finally:
+            resp.close()
+        rules = parse_robots(b"".join(parts).decode('utf-8', errors='replace'), user_agent)
         _ROBOTS_CACHE[origin] = rules
         return rules
     except Exception:
@@ -307,7 +335,7 @@ def robots_allows(url: str, user_agent: str, timeout: int = DEFAULT_TIMEOUT) -> 
     rules = fetch_robots(origin, user_agent, timeout=timeout)
     if rules is None:
         return True
-    return rules.allows(parsed.path or "/")
+    return rules.allows((parsed.path or "/") + ("?" + parsed.query if parsed.query else ""))
 
 
 def reset_network_caches() -> None:
@@ -361,6 +389,10 @@ def specs_from_config(config: Dict[str, Any]) -> List[SourceSpec]:
             official=bool(entry.get("official", False)),
             enabled=bool(entry.get("enabled", True)),
             notes=str(entry.get("notes", "")),
+            source_class=str(entry.get("source_class", "MIXED")),
+            organizer=str(entry.get("organizer", "")),
+            require_onboarding=True,
+            onboarding=entry.get("onboarding", {}) if isinstance(entry.get("onboarding", {}), dict) else {},
         )
         if spec.enabled:
             specs.append(spec)
@@ -557,8 +589,14 @@ def parse_bankless_lessons(body: bytes, spec: SourceSpec) -> List[RawItem]:
     return result
 
 
+def parse_official_missions(payload, spec):
+    from campaign_sources import parse_optimism_missions
+    return parse_optimism_missions(payload, spec)
+
+
 PARSERS: Dict[str, Callable[[bytes, SourceSpec], List[RawItem]]] = {
     "feed": parse_feed,
+    "optimism_missions": parse_official_missions,
     "bankless_lessons": parse_bankless_lessons,
     "wp_rest_posts": parse_wp_rest_posts,
 }
@@ -571,20 +609,9 @@ PARSERS: Dict[str, Callable[[bytes, SourceSpec], List[RawItem]]] = {
 
 def validate_source_url(url: str) -> bool:
     """A source URL must be HTTPS, sane, and not a local/private target."""
-    raw = (url or "").strip()
-    if not raw or not raw.startswith("https://"):
-        return False
-    if len(raw) > 2048:
-        return False
-    host = (urlparse(raw).hostname or "").lower()
-    if not host or "." not in host:
-        return False
-    if host in ("localhost", "127.0.0.1", "::1"):
-        return False
-    lowered = raw.lower()
-    if any(bad in lowered for bad in ("javascript:", "data:", "file:")):
-        return False
-    return True
+    from source_security import validate_public_url
+    return validate_public_url(url)
+
 
 
 def fetch_source(
@@ -602,7 +629,20 @@ def fetch_source(
         result.error = "Invalid or non-HTTPS source URL"
         return result
 
-    parser = PARSERS.get(spec.parser) or parse_feed
+    from source_security import check_source_destination
+    if spec.require_onboarding:
+        from source_onboarding import validate_onboarding
+        problem = validate_onboarding(spec)
+        if problem:
+            result.error = problem
+            return result
+    if not check_source_destination(spec.url):
+        result.error = "Unsafe or unresolvable source destination"
+        return result
+    parser = PARSERS.get(spec.parser)
+    if parser is None:
+        result.error = "Unsupported source parser"
+        return result
 
     if respect_robots and not robots_allows(spec.url, user_agent, timeout=timeout):
         result.robots_blocked = True
@@ -613,11 +653,15 @@ def fetch_source(
     _respect_rate_limit(host, min_interval)
 
     getter = session.get if session is not None else requests.get
+    if not check_source_destination(spec.url):
+        result.error = "Unsafe source destination at request time"
+        return result
     try:
         resp = getter(
             spec.url,
             timeout=timeout,
             headers={"User-Agent": user_agent, "Accept": "*/*"},
+            allow_redirects=False, stream=True,
         )
     except requests.RequestException as exc:
         result.error = f"Network error: {type(exc).__name__}"
@@ -630,16 +674,31 @@ def fetch_source(
     result.content_type = (resp.headers.get("content-type") or "")[:80]
 
     if resp.status_code == 429:
+        resp.close()
         retry_after = resp.headers.get("Retry-After", "")
         result.error = "Rate limited (HTTP 429)" + (
             f", retry-after {retry_after}s" if retry_after else ""
         )
         return result
     if resp.status_code != 200:
+        resp.close()
         result.error = f"HTTP {resp.status_code}"
         return result
 
-    payload = resp.content or b""
+    chunks, size = [], 0
+    try:
+        for chunk in resp.iter_content(chunk_size=65536):
+            size += len(chunk)
+            if size > MAX_RESPONSE_BYTES:
+                result.error = "Response too large"
+                return result
+            chunks.append(chunk)
+        payload = b"".join(chunks)
+    except requests.RequestException as exc:
+        result.error = "Response read failed: " + type(exc).__name__
+        return result
+    finally:
+        resp.close()
     if len(payload) > MAX_RESPONSE_BYTES:
         result.error = f"Response too large ({len(payload)} bytes)"
         return result

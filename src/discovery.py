@@ -398,6 +398,11 @@ def _build_campaign(
         q["reward_type"] = "EDUCATIONAL_BADGE"
         q["eligibility_status"] = "UNKNOWN"
         q["eligibility_evidence"] = "API does not establish participant restrictions"
+    if item.metadata.get("optimism_mission") and spec.parser == "optimism_missions":
+        from campaign_sources import enrich_optimism
+        campaign.quest_intelligence = enrich_optimism(campaign, item, config)
+    campaign.quest_intelligence["source_class"] = spec.source_class
+    campaign.quest_intelligence["discovery_keyword_hit"] = bool(re.search(r"\b(?:airdrop|reward|quest|bounty|incentive|grant|points)\b", gate_text, re.I))
     return campaign
 
 

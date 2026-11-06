@@ -83,14 +83,14 @@ def from_campaign(campaign, text: str = "", metadata: dict | None = None) -> dic
     gas_status, gas_evidence = None, None
     if re.search(r"\b(?:gas fee required|you pay gas|must pay gas|gas is not free)\b", text, re.I) and not re.search(r"\bno gas fees? required\b", text, re.I):
         gas_status, gas_evidence = "FAIL", "Official text explicitly requires paid gas"
-    elif re.search(r"\b(?:gasless|sponsored gas|gas is free|no gas fees?)\b", text, re.I) and not re.search(r"\b(?:not|never) gasless\b", text, re.I):
+    elif re.search(r"\b(?:gasless|sponsored gas|gas is sponsored|gas is free|no gas fees?)\b", text, re.I) and not re.search(r"\b(?:not|never) gasless\b", text, re.I):
         gas_status, gas_evidence = "PASS", "Official text explicitly states gasless or sponsored gas"
     record = {
         "gas_status": gas_status, "gas_evidence": gas_evidence,
         "id": campaign.campaign_id, "project": campaign.project, "name": campaign.title,
         "official_url": campaign.official_url, "source": campaign.source,
         "announcement_url": campaign.announcement_url or campaign.url,
-        "evidence_checks": {"official": bool(campaign.official_url and campaign.source_verification_status in ("official_feed", "authorized_galxe_api")),
+        "evidence_checks": {"official": bool(campaign.official_url and campaign.source_verification_status in ("official_feed", "authorized_galxe_api", "official_campaign_api")),
                             "reward": bool(campaign.evidence_verified or has_reward_program(campaign.title + " " + text)),
                             "participation": bool(campaign.tasks), "organizer": bool(campaign.project)},
         "evidence_verified": campaign.evidence_verified,

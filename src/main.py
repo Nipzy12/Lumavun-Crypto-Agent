@@ -60,7 +60,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-AGENT_VERSION = "1.4.3"
+AGENT_VERSION = "1.4.4"
 
 
 def _env_list(name: str) -> List[str]:
@@ -195,9 +195,12 @@ def main() -> int:
     reward_tracking = update_rewards(state, wallet, os.getenv("PHANTOM_PUBLIC_ADDRESS", "").strip(), config=quest_settings.get("reward_tracking", {}))
     errors.extend(reward_tracking.get("errors", []) if wallet.get("address_valid") else [])
 
+    from source_coverage import coverage_report
+    coverage = coverage_report(specs, source_health, queue, previous_ids, reward_tracking)
     recovery = recovery_report(queue, reward_tracking)
     from pathlib import Path
     import json
+    Path("source_coverage.json").write_text(json.dumps(coverage, indent=2, ensure_ascii=False), encoding="utf-8")
     Path("opportunity_recovery.json").write_text(json.dumps(recovery, indent=2, ensure_ascii=False), encoding="utf-8")
     discovery_diagnostics = discovery_report(observed_quests, source_health, queue, previous_ids, reward_tracking)
     from qualification import shortlist
@@ -248,7 +251,7 @@ def main() -> int:
         total_found=total_found,
         state_source=state_source,
         quest_queue=queue, adapter_health=adapter_health, reward_tracking=reward_tracking,
-        discovery_diagnostics=discovery_diagnostics, recovery_report=recovery,
+        discovery_diagnostics=discovery_diagnostics, recovery_report=recovery, source_coverage=coverage,
     )
     json_path = write_json_report(report)
     md_path = write_markdown_report(report)

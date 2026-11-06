@@ -1,4 +1,4 @@
-# LUMAVUN V1.4.3 architecture
+# LUMAVUN V1.4.4 architecture
 
 ## Data flow
 
@@ -106,3 +106,9 @@ Daily diagnostics use the existing persisted summary notification key. Source fa
 `recovery.py` groups qualification gaps, accepts evidence URL requests and revalidates canonical records through approved official source adapters. Scheduled observations are reused; additional source reads are batched, cached and backed off persistently. A submitted URL never directly changes a qualification field. Unsupported HTML pages are not fetched.
 
 `quests.update_queue` records changed terms and prior task proofs, preserving canonical IDs and completion history while invalidating current approvals. Qualification adds a changed-terms review hold. `persistence_v14.py` unions requests/change histories and merges the latest resolver metadata. `main.py` writes the all-persisted-candidate recovery report, embedded by `reporter.py` and uploaded in the existing report artifact. Wallet attribution, notification keys and schedules retain their existing paths. See [evidence recovery specification](evidence-recovery-v143.md).
+
+## V1.4.4 controlled campaign expansion
+
+`campaign_sources.py` maps the documented Optimism mission API to existing Campaign/quest records with an exact repository/URL binding. `qualification.py` recognizes only this reviewed cross-host API binding; existing gates still apply. Source classification/provenance fields are additive persistence fields, without changing canonical IDs or task/review terms.
+
+`source_onboarding.py` validates committed source reviews and fixture integrity. `source_security.py` validates HTTPS syntax and public DNS destinations; `sources.py` rejects redirects and bounds streamed responses. `source_coverage.py` computes current-scan utility metrics and deduplicated campaign coverage separately from education and receipts. `main.py` writes the additional coverage artifact using the existing workflow artifact path. See [V1.4.4 source expansion specification](source-expansion-v144.md).

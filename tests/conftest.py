@@ -44,3 +44,10 @@ def sample_campaign():
         is_speculation=False,
         raw_summary="Some summary text",
     )
+
+
+@pytest.fixture(autouse=True)
+def deterministic_source_dns(monkeypatch):
+    # Transport fixtures use fictional hosts. Production DNS guards are tested
+    # separately with mocked getaddrinfo, never bypassed by a runtime flag.
+    monkeypatch.setattr('source_security.resolve_public', lambda url: {'93.184.216.34'})

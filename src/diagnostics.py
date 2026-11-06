@@ -39,7 +39,7 @@ def candidate_reasons(record: dict, *, duplicate: bool = False, now: datetime | 
     codes = []
     if record.get("campaign_type") == "NEWS_ONLY":
         codes.append("NEWS_ONLY")
-    official = checks.get("official", bool(record.get("official_url") and record.get("source_verification_status") in ("official_feed", "authorized_galxe_api")))
+    official = checks.get("official", bool(record.get("official_url") and record.get("source_verification_status") in ("official_feed", "authorized_galxe_api", "official_campaign_api")))
     reward = checks.get("reward", bool(record.get("evidence_verified")))
     if not official:
         codes.append("MISSING_OFFICIAL_EVIDENCE")

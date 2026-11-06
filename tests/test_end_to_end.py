@@ -80,7 +80,7 @@ FEED_BODIES = {
 </item>
 </channel></rss>""",
 
-    "https://blog.ethereum.org/feed.xml": """<?xml version="1.0"?>
+    "https://blog.ethereum.org/en/feed.xml": """<?xml version="1.0"?>
 <rss version="2.0"><channel><title>Ethereum Blog</title>
 <item>
   <title>Glamsterdam Testnet Announcement</title>
@@ -90,7 +90,7 @@ FEED_BODIES = {
 </item>
 </channel></rss>""",
 
-    "https://blog.arbitrum.io/feed": """<?xml version="1.0"?>
+    "https://blog.arbitrum.io/rss/": """<?xml version="1.0"?>
 <rss version="2.0"><channel><title>Arbitrum Blog</title>
 <item>
   <title>Arbitrum announces Airdrop campaign</title>
@@ -150,6 +150,9 @@ def isolated_env(monkeypatch, tmp_path):
 
 
 def _register_all(m):
+    from campaign_sources import OPTIMISM_API
+    m.get("https://api.github.com/robots.txt", status_code=404)
+    m.get(OPTIMISM_API, json=[])
     m.get("https://app.banklessacademy.com/robots.txt", text=ROBOTS)
     m.get("https://app.banklessacademy.com/api/lessons", json=[])
     for url, body in FEED_BODIES.items():
@@ -230,9 +233,9 @@ def test_first_run_discovers_classifies_and_notifies(monkeypatch):
     assert Path("dedup_state.json").exists()
 
     # Sources: all six registry entries were read.
-    assert report["source_summary"]["total"] == 7
-    assert report["source_summary"]["reachable"] == 7
-    assert report["source_summary"]["official_sources"] == 3
+    assert report["source_summary"]["total"] == 8
+    assert report["source_summary"]["reachable"] == 8
+    assert report["source_summary"]["official_sources"] == 4
 
     # Discovery + classification.
     assert report["campaign_count"] >= 5
@@ -348,6 +351,6 @@ def test_a_dead_source_does_not_stop_the_run(monkeypatch):
     failed = [h for h in report["source_health"] if not h["reachable"]]
     assert len(failed) == 1
     assert failed[0]["error"] == "HTTP 500"
-    assert report["source_summary"]["reachable"] == 6
+    assert report["source_summary"]["reachable"] == 7
     assert report["errors"]
     assert report["campaign_count"] >= 1, "other sources still produced campaigns"

@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from discovery import Campaign, SourceHealth
 
-AGENT_VERSION = "1.4.3"
+AGENT_VERSION = "1.4.4"
 OPPORTUNITY_TYPES = (
     "CONFIRMED_AIRDROP",
     "POINTS_PROGRAM",
@@ -84,6 +84,7 @@ def build_report(
     quest_queue: Optional[Dict[str, Any]] = None,
     adapter_health: Optional[List[Dict[str, Any]]] = None,
     reward_tracking: Optional[Dict[str, Any]] = None,
+    source_coverage: Optional[Dict[str, Any]] = None,
     recovery_report: Optional[Dict[str, Any]] = None,
     discovery_diagnostics: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -95,6 +96,7 @@ def build_report(
         "discovery_diagnostics": discovery_diagnostics or {},
         "quest_adapters": adapter_health or [],
         "reward_tracking": reward_tracking or {},
+        "source_coverage": source_coverage or {},
         "opportunity_recovery": recovery_report or {},
         "version": AGENT_VERSION,
         "scan_time_utc": scan_time,
@@ -367,6 +369,11 @@ def write_markdown_report(report: Dict[str, Any], path: Optional[Path] = None) -
             lines.append(f"    - {name}: {evidence['status']} — {evidence['explanation']} | {evidence['evidence_url']} | checked {evidence['last_verified_at']}")
         for task in quest.get("tasks", {}).values():
             lines.append(f"  - [{task['status']}] {task['text']}")
+    coverage = report.get("source_coverage") or {}
+    lines.extend(["", "## Official campaign coverage", ""])
+    for field in ('official_campaign_sources_available','newly_discovered_campaigns','verified_candidates','actionable_candidates','educational_only_entries','confirmed_received_rewards'):
+        lines.append(f"- {field}: {coverage.get(field, 0)}")
+    lines.append("Education is separate; source quality is measured utility, not safety or income probability.")
     recovery = report.get("opportunity_recovery") or {}
     lines.extend(["", "## Evidence recovery", ""])
     lines.append(f"Total persisted candidates: {recovery.get('total_candidates', 0)} | {recovery.get('qualification_counts', {})}")

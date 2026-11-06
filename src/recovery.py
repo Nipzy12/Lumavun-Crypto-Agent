@@ -88,7 +88,7 @@ def revalidate(state, specs, config, observations=None, now=None, fetch=fetch_so
     from quests import parse_time, update_queue, refresh_status
     from discovery import _build_campaign
     now = now or datetime.now(timezone.utc)
-    official = {s.url: s for s in specs if s.enabled and s.official and s.parser in ('feed', 'bankless_lessons', 'wp_rest_posts')}
+    official = {s.url: s for s in specs if s.enabled and s.official and s.parser in ('feed', 'bankless_lessons', 'wp_rest_posts', 'optimism_missions')}
     observed = {q['id']: q for q in observations or []}
     queue = state.setdefault('quest_queue', {})
     fetched = {}
@@ -127,7 +127,8 @@ def revalidate(state, specs, config, observations=None, now=None, fetch=fetch_so
                     import requests
                     class NoRedirectSession:
                         def get(self, url, **kwargs):
-                            return requests.get(url, allow_redirects=False, **kwargs)
+                            kwargs['allow_redirects'] = False
+                            return requests.get(url, **kwargs)
                     result = fetch(official[source], session=NoRedirectSession(), timeout=int(policy.get('request_timeout_seconds', 20)),
                                    min_interval=float(policy.get('min_interval_seconds', 1.5)), respect_robots=True,
                                    user_agent=str(policy.get('user_agent', 'LUMAVUN-Crypto-Agent/1.4.3')))

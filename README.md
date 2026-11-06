@@ -1,8 +1,18 @@
-# LUMAVUN Autonomous Crypto Agent V1.4.3
+# LUMAVUN Autonomous Crypto Agent V1.4.4
 
 A zero-capital airdrop intelligence system: it reads a registry of verified sources (RSS/Atom feeds and public JSON APIs), extracts campaigns with their evidence, classifies the opportunity, applies a zero-capital filter, scores explainable risk indicators, and sends actionable Telegram notifications. It also monitors a Phantom wallet's SOL and SPL balances read-only.
 
 **No guaranteed earnings. No automatic claiming, wallet signing, transactions, or trades.** Every report states this in plain words.
+
+## V1.4.4 — Official campaign discovery expansion
+
+Eight sources are configured, including the **official Optimism Foundation Mission Requests** public GitHub API. The adapter checks repository/issue provenance and the curated mission label, extracts explicit task/reward/date/eligibility terms, and rejects PRs and unrelated issues. An open issue is not proof of active participation; grant budgets are not received earnings. Missing fees, gas or eligibility remain UNKNOWN.
+
+Sources are audited as NEWS, EDUCATION, CAMPAIGN or MIXED. `source_coverage.json` separates educational entries, noneducational campaigns, token programs and confirmed received rewards. Its source-quality score measures observed utility, never safety or payout likelihood, and cannot override qualification gates.
+
+New source onboarding requires reviewed provenance, a parser fixture and an approved endpoint binding. All source requests receive public-DNS/URL checks, redirect rejection and bounded response reads. Ethereum/Arbitrum feeds use verified canonical URLs. Existing state, schedules, secrets, wallet monitoring and Galxe AUTH_REQUIRED behavior are retained.
+
+See [source audit, endpoint evidence, onboarding and scoring details](docs/source-expansion-v144.md).
 
 ## V1.4.3 — Evidence resolution and opportunity recovery
 
