@@ -238,3 +238,9 @@ def test_malformed_optional_resolution_does_not_reset_progress(tmp_path, monkeyp
     assert record['tasks'] == tasks
     assert record['evidence_requests'] == []
     assert record['evidence_resolution']['failures'] == 1
+
+
+def test_unrequested_candidates_have_explicit_resolution_status():
+    state, q = setup()
+    report = recovery_report(state['quest_queue'], {}, NOW)
+    assert report['resolution_outcomes'] == [{'candidate_id':q['id'], 'status':'NOT_REQUESTED'}]

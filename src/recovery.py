@@ -194,4 +194,4 @@ def recovery_report(queue, rewards, now=None):
             'only_participant_verification_remaining':sum(r['public_evidence_resolved'] and bool(r['participant_specific_fields']) and not r['additional_actions'] for r in review),
             'reward_classes':dict(classes), 'confirmed_received_rewards':len(rewards.get('actual_rewards_received', [])),
             'income_note':'Badges, points, speculative allocations and promised rewards are not received income', 'candidates':rows,
-            'resolution_outcomes':[{'candidate_id':q['id'], **q['evidence_resolution']} for q in queue.values() if isinstance(q.get('evidence_resolution'),dict)]}
+            'resolution_outcomes':[{'candidate_id':q['id'], 'status':'NOT_REQUESTED', **(q.get('evidence_resolution') or {})} for q in queue.values()]}

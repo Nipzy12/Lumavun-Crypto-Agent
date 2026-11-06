@@ -39,12 +39,12 @@ Local CLI updates affect the local restored artifact. Production still restores 
 
 ## Persistent recovery report
 
-`opportunity_recovery.json` is included in the existing `latest_report` artifact and embedded in `latest_report.json`; Markdown shows key counts. It covers **all persisted candidates**, including candidates outside today's feed window. It records total/qualification counts, REVIEW_REQUIRED grouped by missing field and IDs, public-evidence-resolved counts, participant-specific waiting counts, field-resolution outcomes, reward classes and confirmed received rewards. The normal report still distinguishes current-scan counts.
+`opportunity_recovery.json` is included in the existing `latest_report` artifact and embedded in `latest_report.json`; Markdown shows key counts. It covers **all persisted candidates**, including candidates outside today's feed window. It records total/qualification counts, REVIEW_REQUIRED grouped by missing field and IDs, public-evidence-resolved counts, participant-specific waiting counts, field-resolution outcomes (including explicit NOT_REQUESTED where no revalidation was attempted), reward classes and confirmed received rewards. The normal report still distinguishes current-scan counts.
 
 Artifact retention is the existing seven days. Evidence requests, cache/backoff metadata and append-only terms events persist across runs in the existing state artifact. Optional malformed resolver fields are sanitized without resetting task history. State merges union request/change events and retain the newest resolution metadata. No new dependency, secret, schedule or wallet transaction capability is introduced. Badges, points and speculative allocations never become income; only the retained transaction-attribution engine reports confirmed received rewards.
 
 ## Validation
 
-Complete local suite on 2026-11-06: **483 passed in 17.97s**. Deterministic regressions cover changed/withdrawn evidence, stale-cache behavior, Retry-After/backoff, unsupported sources, redirects, robots restrictions, ambiguous fees, participant eligibility, read-only review and URL submission, event merges, historical task-proof preservation and malformed optional resolver state.
+Complete local suite on 2026-11-06: **484 passed in 18.30s**. Deterministic regressions cover changed/withdrawn evidence, stale-cache behavior, Retry-After/backoff, unsupported sources, redirects, robots restrictions, ambiguous fees, participant eligibility, read-only review and URL submission, event merges, historical task-proof preservation and malformed optional resolver state.
 
 A read-only migration check against the actual V1.4.2 artifact from run `42209308808` retained all 27 canonical IDs, task records, reviews, notifications and wallet attribution records. Repeated sanitization was identical. This is migration validation, not a new live opportunity or reward claim.
