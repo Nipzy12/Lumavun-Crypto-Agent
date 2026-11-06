@@ -178,6 +178,9 @@ def update_queue(state: dict, quests: list[dict], now: datetime | None = None) -
         incoming["review_history"] = history_union(old.get("review_history"), incoming.get("review_history"))
         incoming["task_archive"] = {**(old.get("task_archive") or {}), **{k:v for k,v in old.get("tasks", {}).items() if k not in incoming["tasks"]}}
         from recovery import terms, terms_data, union_events
+        if old.get("operations"):
+            incoming["operations"] = old["operations"]
+        incoming["operation_history"] = union_events(old.get("operation_history"), incoming.get("operation_history"))
         incoming["operator_history"] = union_events(old.get("operator_history"), incoming.get("operator_history"))
         incoming["evidence_requests"] = union_events(old.get("evidence_requests"), incoming.get("evidence_requests"))
         incoming["evidence_resolution"] = old.get("evidence_resolution", {})

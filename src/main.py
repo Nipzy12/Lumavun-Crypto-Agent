@@ -60,7 +60,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-AGENT_VERSION = "1.4.5"
+AGENT_VERSION = "1.5"
 
 
 def _env_list(name: str) -> List[str]:
@@ -195,6 +195,15 @@ def main() -> int:
     reward_tracking = update_rewards(state, wallet, os.getenv("PHANTOM_PUBLIC_ADDRESS", "").strip(), config=quest_settings.get("reward_tracking", {}))
     errors.extend(reward_tracking.get("errors", []) if wallet.get("address_valid") else [])
 
+    from operations import sync, playbook
+    for record in queue.values():
+        sync(record, reward_tracking.get("actual_rewards_received", []))
+    operation_playbooks = {cid: playbook(record) for cid, record in queue.items()}
+    from pathlib import Path
+    import json
+    Path("operator_playbooks.json").write_text(json.dumps(operation_playbooks, indent=2, ensure_ascii=False), encoding="utf-8")
+    from operator_bot import poll, claim_update
+    operator_commands = poll(state, checkpoint=claim_update)
     from source_coverage import coverage_report
     coverage = coverage_report(specs, source_health, queue, previous_ids, reward_tracking)
     recovery = recovery_report(queue, reward_tracking)
@@ -260,6 +269,8 @@ def main() -> int:
         quest_queue=queue, adapter_health=adapter_health, reward_tracking=reward_tracking,
         discovery_diagnostics=discovery_diagnostics, recovery_report=recovery, source_coverage=coverage,
     )
+    report["operator_commands"] = operator_commands
+    report["operation_playbooks"] = operation_playbooks
     report["review_worklist"] = review_worklist
     json_path = write_json_report(report)
     md_path = write_markdown_report(report)

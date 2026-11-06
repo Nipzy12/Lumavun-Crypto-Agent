@@ -67,7 +67,10 @@ def _rpc_post(
             json=payload,
             timeout=timeout,
             headers={"Content-Type": "application/json"},
+            allow_redirects=False,
         )
+        if 300 <= resp.status_code < 400:
+            raise RuntimeError("RPC redirects are not allowed")
         resp.raise_for_status()
     except requests.RequestException as exc:
         raise RuntimeError(f"RPC request failed: {type(exc).__name__}") from exc

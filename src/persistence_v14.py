@@ -14,7 +14,7 @@ QUEST_FIELDS = {
     'eligibility_evidence', 'risk_indicators', 'risk_explanation', 'risk_band', 'campaign_type',
     'announcement_url', 'evidence_checks', 'reasons', 'human_review',
     'source_class', 'source_updated_at', 'date_evidence', 'provenance', 'discovery_keyword_hit',
-    'operator_history', 'evidence_requests', 'evidence_resolution', 'terms_digest', 'terms_review_required', 'terms_events',
+    'operations', 'operation_history', 'operator_history', 'evidence_requests', 'evidence_resolution', 'terms_digest', 'terms_review_required', 'terms_events',
     'qualification', 'qualification_schema', 'review_history', 'eligibility_text', 'task_archive', 'gas_status', 'gas_evidence',
     'platform_status', 'status', 'verified_at', 'first_seen', 'updated_at', 'last_observed', 'terms_hash',
 }
@@ -79,7 +79,7 @@ def clean_queue(value):
         if not isinstance(clean.get('task_archive'), dict):
             clean['task_archive'] = {}
         from recovery import union_events
-        for key in ('evidence_requests', 'terms_events', 'operator_history'):
+        for key in ('evidence_requests', 'terms_events', 'operator_history', 'operation_history'):
             clean[key] = union_events(record.get(key))
         clean['evidence_requests'] = [e for e in clean['evidence_requests'] if isinstance(e.get('url'), str) and e.get('status') in ('PENDING','CHECKED','UNSUPPORTED')]
         if not isinstance(clean.get('evidence_resolution'), dict):
@@ -88,6 +88,9 @@ def clean_queue(value):
         if not isinstance(resolution.get('failures', 0), int):
             resolution['failures'] = 0
         migrate_record(clean)
+        if 'operations' in record:
+            from operations import migrate
+            migrate(clean)
         clean['tasks'] = tasks
         result[ident] = clean
     return result
@@ -115,6 +118,8 @@ def clean_wallets(value):
                 pass
         if isinstance(record.get('signatures'), dict):
             clean['signatures'] = {k: v for k, v in record['signatures'].items() if isinstance(k, str) and isinstance(v, str)}
+        if isinstance(record.get('monitor'), dict):
+            clean['monitor'] = _json(record['monitor'])
         result[ident] = clean
     return result
 
@@ -129,10 +134,13 @@ def merge_extensions(base, update):
         winner, other = (record, old) if record['updated_at'] >= old['updated_at'] else (old, record)
         winner = deepcopy(winner)
         from recovery import union_events
-        for key in ('evidence_requests', 'terms_events', 'operator_history'):
+        for key in ('evidence_requests', 'terms_events', 'operator_history', 'operation_history'):
             winner[key] = union_events(winner.get(key), other.get(key))
         resolutions = [r for r in (winner.get('evidence_resolution'), other.get('evidence_resolution')) if isinstance(r, dict) and r]
         winner['evidence_resolution'] = max(resolutions, key=lambda r: str(r.get('updated_at', ''))) if resolutions else {}
+        operation_states = [r.get('operations') for r in (winner, other) if isinstance(r.get('operations'), dict)]
+        if operation_states:
+            winner['operations'] = max(operation_states, key=lambda r: str(r.get('updated_at', '')))
         from qualification import history_union
         winner['review_history'] = history_union(winner.get('review_history'), other.get('review_history'))
         winner['task_archive'] = {**(other.get('task_archive') or {}), **(winner.get('task_archive') or {}),
@@ -163,6 +171,8 @@ def merge_extensions(base, update):
             previous = old['events'].get(eid)
             if not previous or previous.get('attribution') != 'CONFIRMED_QUEST_REWARD':
                 old['events'][eid] = event
+        if record.get('monitor', {}).get('updated_at', '') >= old.get('monitor', {}).get('updated_at', '') and record.get('monitor'):
+            old['monitor'] = record['monitor']
         old['signatures'].update(record['signatures'])
         old['token_baseline'] |= record['token_baseline']
         old['updated_at'] = max(old['updated_at'], record['updated_at'])

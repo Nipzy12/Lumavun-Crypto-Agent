@@ -154,6 +154,9 @@ def _sanitize_state(data: Any) -> Dict[str, Any]:
     from persistence_v14 import clean_queue, clean_wallets
     clean["quest_queue"] = clean_queue(data.get("quest_queue"))
     clean["reward_wallets"] = clean_wallets(data.get("reward_wallets"))
+    operator = data.get("telegram_operator")
+    if isinstance(operator, dict) and type(operator.get("offset")) is int and operator["offset"] >= 0:
+        clean["telegram_operator"] = {"offset": operator["offset"]}
     return clean
 
 
@@ -225,6 +228,10 @@ def merge_states(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]
     merged["notifications"] = notifications
     from persistence_v14 import merge_extensions
     merged.update(merge_extensions(base, update))
+    offsets = [s.get('telegram_operator', {}).get('offset') for s in (base, update) if isinstance(s.get('telegram_operator'), dict)]
+    offsets = [v for v in offsets if type(v) is int and v >= 0]
+    if offsets:
+        merged['telegram_operator'] = {'offset': max(offsets)}
     return merged
 
 

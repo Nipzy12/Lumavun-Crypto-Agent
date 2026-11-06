@@ -142,7 +142,15 @@ def update_rewards(state: dict, wallet: dict, address: str, *, config: dict | No
                 tracker["events"][ident] = event
                 balance_changes.append(event)
         tracker["assets"][asset] = {"amount": amount, "at": now}
-    incoming, processed, errors = fetch(address, wallet.get("used_rpc", ""), set(tracker["signatures"]))
+    monitor = {}
+    if fetch is recent_transfers:
+        import os
+        from reward_monitor import reconcile
+        providers = [wallet.get("used_rpc", ""), os.getenv("SOLANA_REWARD_RPC_URL", "").strip()]
+        providers.extend(u.strip() for u in os.getenv("SOLANA_RPC_FALLBACK_URLS", "").split(',') if u.strip())
+        incoming, processed, errors, monitor = reconcile(address, providers, tracker)
+    else:
+        incoming, processed, errors = fetch(address, wallet.get("used_rpc", ""), set(tracker["signatures"]))
     for signature in processed:
         tracker["signatures"][signature] = now
     for event in incoming:
@@ -163,12 +171,13 @@ def update_rewards(state: dict, wallet: dict, address: str, *, config: dict | No
     tracker["updated_at"] = now
     events = list(tracker["events"].values())
     return {
+        "monitor": monitor,
         "status": "DEGRADED" if errors else "OK", "balance_changes": balance_changes,
         "actual_rewards_received": [e for e in events if e["attribution"] == "CONFIRMED_QUEST_REWARD"],
         "confirmed_received_tokens": [e for e in events if e["attribution"] == "CONFIRMED_RECEIVED_TOKEN"],
         "unverified_incoming_tokens": [e for e in events if e["attribution"] == "UNVERIFIED_INCOMING"],
         "offchain_points": [{"quest_id": q["id"], "status": "advertised_not_earned", "earned": None} for q in state.get("quest_queue", {}).values() if q["reward_type"] == "OFFCHAIN_POINTS"],
         "speculative_rewards": [q["id"] for q in state.get("quest_queue", {}).values() if q["reward_status"] == "speculative"],
-        "coverage": "Latest 20 finalized wallet-address signatures per scan; not complete history. Snapshot changes and transaction deltas are overlapping evidence, never summed as income.",
+        "coverage": "Bounded resumable finalized wallet-address history; token-account-only history is not enumerated. Snapshot changes and transaction deltas are overlapping evidence, never summed as income.",
         "errors": errors,
     }

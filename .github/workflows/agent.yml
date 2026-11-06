@@ -1,11 +1,11 @@
-name: LUMAVUN Crypto Agent V1.4.5
+name: LUMAVUN Crypto Agent V1.5
 on:
   workflow_dispatch:
     inputs:
       queue_action:
         description: Record a human task decision (never executes the task)
         type: choice
-        options: [none, approve, complete, submit_evidence]
+        options: [none, approve, complete, submit_evidence, operation]
         default: none
       quest_id:
         description: Quest ID from the latest report
@@ -20,10 +20,18 @@ on:
         description: Official URL for independent revalidation; never submitted facts
         required: false
       expected_revision:
-        description: Revision from latest review_worklist.json
+        description: Revision from review_worklist.json for evidence, operator_playbooks.json for operations
         required: false
       review_request_id:
         description: Unique request ID, reuse only for an identical retry
+        required: false
+      operation:
+        description: Explicit human lifecycle decision or grant planning; never executes externally
+        type: choice
+        options: [ELIGIBLE, READY_FOR_HUMAN, IN_PROGRESS, SUBMITTED, AWAITING_RESULT, WITHDRAWN, CANCELLED, GRANT_PLAN]
+        default: ELIGIBLE
+      grant_plan:
+        description: JSON planning fields only; no private participant information
         required: false
   schedule:
     - cron: '17 1,13 * * *'
@@ -128,6 +136,20 @@ jobs:
           REVIEWER: ${{ github.actor }}
         run: python scripts/import_evidence.py
 
+      - name: Record authorized operator lifecycle decision
+        if: github.event_name == 'workflow_dispatch' && inputs.queue_action == 'operation'
+        env:
+          LUMAVUN_STATE_SOURCE: ${{ steps.dedup_in.outputs.state_source }}
+          OPERATOR_AUTHORIZED: 'true'
+          QUEST_ID: ${{ inputs.quest_id }}
+          OPERATION: ${{ inputs.operation }}
+          GRANT_PLAN: ${{ inputs.grant_plan }}
+          TASK_EVIDENCE: ${{ inputs.task_evidence }}
+          EXPECTED_REVISION: ${{ inputs.expected_revision }}
+          REVIEW_REQUEST_ID: ${{ inputs.review_request_id || github.run_id }}
+          REVIEWER: ${{ github.actor }}
+        run: python scripts/opportunity_ops.py workflow
+
       - name: Run agent
         id: run
         run: python src/main.py
@@ -139,6 +161,8 @@ jobs:
           SOLANA_RPC_FALLBACK_URLS: ${{ vars.SOLANA_RPC_FALLBACK_URLS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_OPERATOR_USER_IDS: ${{ vars.TELEGRAM_OPERATOR_USER_IDS }}
+          SOLANA_REWARD_RPC_URL: ${{ secrets.SOLANA_REWARD_RPC_URL || vars.SOLANA_REWARD_RPC_URL }}
           GALXE_ACCESS_TOKEN: ${{ secrets.GALXE_ACCESS_TOKEN }}
 
       # Reports and state are uploaded even when the agent fails, so a broken
@@ -154,6 +178,7 @@ jobs:
             opportunity_recovery.json
             source_coverage.json
             review_worklist.json
+            operator_playbooks.json
           retention-days: 7
           if-no-files-found: warn
           overwrite: true

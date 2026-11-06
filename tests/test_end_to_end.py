@@ -278,7 +278,7 @@ def test_first_run_discovers_classifies_and_notifies(monkeypatch):
     sent = [c.text for c in m.request_history if "sendMessage" in str(c.url)]
     assert sent
     joined = "\n".join(sent)
-    assert "LUMAVUN Crypto Agent V1.4" in joined
+    assert "LUMAVUN Crypto Agent V1.5" in joined
     assert "CONFIRMED_AIRDROP" in joined
     assert "Zero-capital" in joined
 
@@ -328,7 +328,7 @@ def test_report_markdown_is_readable_and_labels_heuristics(monkeypatch):
         assert _run_main(monkeypatch) == 0
 
     text = Path("latest_report.md").read_text(encoding="utf-8")
-    assert "# LUMAVUN Crypto Agent V1.4" in text
+    assert "# LUMAVUN Crypto Agent V1.5" in text
     assert "## Kesehatan sumber" in text
     assert "## Ringkasan tipe peluang" in text
     assert "## Filter zero-capital" in text

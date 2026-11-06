@@ -362,7 +362,7 @@ def build_daily_summary(
     total = total_found if total_found is not None else new_count
 
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.4.5 - ringkasan harian")
+    lines.append("LUMAVUN Crypto Agent V1.5 - ringkasan harian")
     lines.append(f"Scan: {scan_time}")
     if quest_summary is not None:
         groups = quest_summary.get("shortlist")

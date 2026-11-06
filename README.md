@@ -392,3 +392,102 @@ policy, and uploads the state for the next scheduled run.
 Daily Telegram digests show up to five REVIEW_REQUIRED candidates with official
 links and missing requirements. The existing daily notification key is retained;
 an already delivered daily digest is not resent merely because of this upgrade.
+
+## V1.5: human-assisted operations
+
+The separate operator lifecycle is:
+
+`DISCOVERED → EVIDENCE_REVIEW → ELIGIBLE → READY_FOR_HUMAN → IN_PROGRESS → SUBMITTED → AWAITING_RESULT → REWARD_VERIFIED`
+
+BLOCKED, EXPIRED, WITHDRAWN and CANCELLED are explicit outcomes. Qualification
+remains authoritative: unknown fees, gas, eligibility or other mandatory facts
+prevent ELIGIBLE and execution progression. New adverse evidence suspends
+pre-submission operations without deleting prior task proofs or decisions.
+Submission is a human report requiring completed task proofs (or a reviewed grant
+application plan), plus a submission note/receipt. Visiting a URL proves nothing.
+Only an actual finalized, explicitly attributed wallet receipt can establish
+REWARD_VERIFIED, after an application has reached AWAITING_RESULT.
+
+Download `operator_playbooks.json` from the reports artifact, or run:
+
+```bash
+python scripts/opportunity_ops.py inspect
+python scripts/opportunity_ops.py inspect --quest CAMPAIGN_ID
+```
+
+Review candidates receive evidence-gathering checklists only. Eligible candidates
+receive human checklists with official URL, tasks, eligibility, fees/gas, deadline,
+reward class and completion requirements. These never connect a wallet, sign,
+submit an application, create an account or perform engagement.
+
+For an explicit cloud decision, dispatch `agent.yml` with `queue_action=operation`,
+`operation` set to the next lifecycle state, `quest_id`, `expected_revision` from
+**operator_playbooks.json** (not the triage worklist), `review_request_id`, and a
+`task_evidence` reason/receipt note. Repository workflow write access is required.
+A stale revision fails closed. Reusing an identical request is idempotent. Local
+operators can use `scripts/opportunity_ops.py transition --quest ID --target STATE
+--actor NAME --reason NOTE --revision HASH --request-id UNIQUE --authorize`.
+Existing per-task `approve` and `complete` commands remain separate; lifecycle
+progression does not grant wallet, account or social permissions.
+
+Developer/community grants use a separate grant track. An operator may record
+`operation=GRANT_PLAN` with `grant_plan` JSON containing exactly:
+
+```json
+{
+  "applicant_fit_reviewed": false,
+  "technical_requirements": "",
+  "proposal_draft": "",
+  "deliverables": ""
+}
+```
+
+Fill these with truthful, human-reviewed planning information, never private
+participant data. Local equivalent: `scripts/opportunity_ops.py plan --plan-file
+plan.json` with the same authorization/revision arguments. This is a draft and
+applicant-fit review, not independently verified eligibility, submission, completed
+contributions or income. Grant budgets never count as received rewards.
+
+### Read-only Telegram commands
+
+Set repository Variable `TELEGRAM_OPERATOR_USER_IDS` to a comma-separated list of
+numeric Telegram user IDs. The existing `TELEGRAM_CHAT_ID` must also match. No
+allowlist means commands remain DISABLED. Forwarded messages, anonymous sender
+chats, bots, other chats and other users cannot issue operator commands.
+
+Commands: `/status`, `/worklist`, `/opportunity ID`, `/rewards`, `/monitor`.
+They cannot mutate reviews or approve tasks, and omit participant notes, grant
+drafts, wallet addresses and provider credentials. State changes require the
+explicit authenticated workflow or local CLI authorization described above.
+
+The existing scheduled scan polls at most 20 updates each run; it is **not an
+always-on bot**. Dispatch the scan or run `python scripts/operator_bot.py` with the
+same environment and restored state for an earlier bounded poll. Telegram retains
+pending updates for at most 24 hours. Persisted atomic update claims suppress
+repeated messages across workers/restarts. Delivery is at-most-once: a crash after
+claim or ambiguous send may lose a reply; send a new command to retry. Do not run
+another bot consumer/webhook against the same bot simultaneously.
+
+### Reward monitoring
+
+The monitor distinguishes ZERO_TRANSFERS (successful empty finalized address
+history), RPC_UNAVAILABLE, PARTIAL and BACKOFF. A persistent cursor advances only
+after the entire fetched interval and its transactions are resolved. Pending
+transactions and pagination resume after failure; duplicate signatures/assets do
+not duplicate attribution. Each scan is bounded to two pages and 24 total RPC
+requests, with bounded exponential request retries and persistent retry backoff.
+
+Optionally configure `SOLANA_REWARD_RPC_URL` as a Secret for a credential-bearing
+URL, or a Variable for a public endpoint, from a second trusted provider you are
+authorized to use. Existing `SOLANA_RPC_FALLBACK_URLS` remains compatible. At most
+two distinct configured endpoints are used; no paid service is enabled implicitly.
+Provider URLs/keys are not written to monitoring output. HTTPS/public destinations
+and redirects are checked. Finalized signature status, matching transaction
+signature/slot and owner-specific token balance changes are required.
+
+Completeness is explicit: the scanner covers wallet-address signatures, **not
+all token-account-only history**. This unresolved scope gap remains reported even
+when the monitored address has zero transfers. Provider retention gaps, unavailable
+transactions and bounded pagination are also reported, without resetting the last
+successful cursor. Confirmed attribution still requires a reviewed campaign link;
+incoming tokens, badges, points and grant budgets are never presumed earnings.

@@ -129,3 +129,36 @@ It never imports a submitted state document or facts. `operator_history` records
 request payload hashes, actor, timestamp, URL and conflict/outcome; discovery and
 state merges union that history. Independent official-source revalidation alone
 can alter facts. Existing human task approval and completion remain separate.
+
+### V1.5 operator lifecycle and reconciliation
+
+`operations.py` adds an additive per-candidate `operations` snapshot and append-only
+`operation_history`; canonical IDs, legacy task state/proofs and notification keys
+remain unchanged. Initial migration is idempotent and never infers a completed
+operation from legacy task completion. Current mandatory qualification gates are
+checked at each pre-submission transition. Receipt reconciliation is the only
+REWARD_VERIFIED path. Plans and execution checklists are separate from evidence
+checklists and do not execute instructions. Grant plans retain versioned human
+reviews; grant allocations never enter transaction earnings metrics.
+
+`scripts/opportunity_ops.py` applies explicit intents under an exclusive lock with
+semantic revision validation, atomic replacement and duplicate request detection.
+Merge logic unions operation events and selects the newest operation snapshot
+independently of newer source observations. The existing workflow concurrency
+serializes cloud scans and dispatches; no existing schedule or permissions change.
+
+`reward_monitor.py` maintains cursor/head/before, pending signatures, retry time,
+last successful interval and explicit scope/history gaps. Transactions are
+finalized and identity/owner checked, then deduplicated by existing signature plus
+asset event keys. Failed RPC calls never count as empty history. The legacy
+`recent_transfers` function remains available for compatibility; production uses
+the resumable reconciler. The monitored address history is not a claim of complete
+SPL-account coverage or archival-provider completeness.
+
+`operator_bot.py` authenticates sender and chat using Telegram's Bot API transport
+and explicit user allowlist. Replies use a minimal public projection, excluding
+review notes, applicant information and credential-bearing provider URLs. Only
+notification cursor metadata changes, never qualification or task decisions.
+Atomic pre-send claims provide at-most-once dispatch across overlapping workers;
+there is no claim of exactly-once delivery. Polling is bounded and follows the
+existing scan schedule unless an operator invokes the standalone poll.

@@ -143,7 +143,7 @@ class TestTriggerAndSafety:
 
 
 class TestV13SourceVerification:
-    """The V1.4 source check must be visible without stopping the scan."""
+    """The V1.5 source check must be visible without stopping the scan."""
 
     def test_verify_sources_step_exists(self, steps):
         step = _find(steps, "Verify sources")
@@ -178,7 +178,7 @@ class TestV13SourceVerification:
         assert "zero_capital_summary" in run
 
     def test_workflow_name_reports_the_current_version(self, workflow):
-        assert "V1.4" in str(workflow["name"])
+        assert "V1.5" in str(workflow["name"])
 
     def test_git_hub_variables_still_flow_to_the_agent(self, steps):
         env = _find(steps, "Run agent").get("env") or {}

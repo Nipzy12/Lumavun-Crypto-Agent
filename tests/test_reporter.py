@@ -96,7 +96,7 @@ def test_report_carries_v13_structure():
         total_found=9,
         state_source="run:123",
     )
-    assert report["version"] == "1.4.5"
+    assert report["version"] == "1.5"
     assert report["state_source"] == "run:123"
     assert report["campaign_count"] == 1
     assert report["total_found"] == 9
@@ -203,7 +203,7 @@ def test_markdown_renders_the_v13_sections(tmp_path):
     path = write_markdown_report(report, path=tmp_path / "r.md")
     text = path.read_text(encoding="utf-8")
 
-    assert "# LUMAVUN Crypto Agent V1.4" in text
+    assert "# LUMAVUN Crypto Agent V1.5" in text
     assert "`run:123`" in text
     assert "## Ringkasan tipe peluang" in text
     assert "**CONFIRMED_AIRDROP:** 1" in text
