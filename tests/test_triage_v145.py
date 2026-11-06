@@ -14,7 +14,7 @@ def request(q, **changes):
 
 
 def test_grant_is_not_airdrop_or_individual_income():
-    q, _ = qualified(name='Developer grant', reward_type='TOKEN', reward_evidence='Total allocation 100000 OP grant budget')
+    q, _ = qualified(name='Developer grant', reward_type='TOKEN', reward_evidence='Total allocation 100000 OP grant budget', provenance={'repository': 'ecosystem-contributions'})
     axes = classify(q, qualify(q, NOW))
     assert axes['reward_type'] == 'grant'
     assert axes['participation_model'] == 'developer grant'

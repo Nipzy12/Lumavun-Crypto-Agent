@@ -23,8 +23,9 @@ def classify(record, qualification=None):
     grant = bool(re.search(r'\b(grant|grants|foundation mission|total allocation|program budget)\b', text))
     reward_class = q['reward_class']
     reward = 'grant' if grant else 'nonmonetary' if reward_class in ('POINTS_ONLY', 'EDUCATIONAL_BADGE') else 'token' if reward_class in ('CONFIRMED_TOKEN_REWARD', 'CONDITIONAL_TOKEN_REWARD') else 'monetary' if record.get('reward_type') in ('CASH', 'FIAT') and record.get('reward_evidence') and record.get('evidence_verified') else 'unknown'
-    community_grant = grant and bool(re.search(r'\b(community|contributions|governance|moderation|documentation|bounty board)\b', text))
-    developer_grant = grant and bool(re.search(r'\b(developer|technical|tooling|integration|infrastructure)\b', text))
+    model_text = str(record.get('name') or '').lower()
+    community_grant = grant and bool(re.search(r'\b(community|contributions|governance|moderation|documentation|bounty board)\b', model_text))
+    developer_grant = grant and bool(re.search(r'\b(developer|technical|tooling|integration|infrastructure)\b', model_text))
     model = 'community contribution' if community_grant else 'developer grant' if developer_grant else 'unknown' if grant else 'education' if reward_class == 'EDUCATIONAL_BADGE' else 'community contribution' if re.search(r'\bcommunity contribution\b', text) else 'individual quest' if fields['tasks']['status'] == 'PASS' and record.get('evidence_verified') else 'unknown'
     return {'participation_cost': cost, 'reward_type': reward, 'participation_model': model}
 
