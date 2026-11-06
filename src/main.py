@@ -60,7 +60,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-AGENT_VERSION = "1.4.4"
+AGENT_VERSION = "1.4.5"
 
 
 def _env_list(name: str) -> List[str]:
@@ -202,6 +202,13 @@ def main() -> int:
     import json
     Path("source_coverage.json").write_text(json.dumps(coverage, indent=2, ensure_ascii=False), encoding="utf-8")
     Path("opportunity_recovery.json").write_text(json.dumps(recovery, indent=2, ensure_ascii=False), encoding="utf-8")
+    from triage import worklist, classify
+    review_worklist = worklist(queue)
+    review_worklist["classifications"] = {k: classify(v) for k, v in queue.items()}
+    review_worklist["promoted_to_actionable"] = sum(qualify(v)["status"] == "ACTIONABLE" and prior_qualifications[k]["status"] != "ACTIONABLE" for k, v in queue.items() if k in prior_qualifications)
+    review_worklist["simple_quest_candidates"] = sum(a["participation_model"] == "individual quest" and a["reward_type"] in ("token", "monetary") for a in review_worklist["classifications"].values())
+    Path("review_worklist.json").write_text(json.dumps(review_worklist, indent=2, ensure_ascii=False), encoding="utf-8")
+    quest_summary["review_worklist"] = review_worklist
     discovery_diagnostics = discovery_report(observed_quests, source_health, queue, previous_ids, reward_tracking)
     from qualification import shortlist
     quest_summary["shortlist"] = shortlist({k:v for k,v in queue.items() if k in {q["id"] for q in observed_quests}})
@@ -253,6 +260,7 @@ def main() -> int:
         quest_queue=queue, adapter_health=adapter_health, reward_tracking=reward_tracking,
         discovery_diagnostics=discovery_diagnostics, recovery_report=recovery, source_coverage=coverage,
     )
+    report["review_worklist"] = review_worklist
     json_path = write_json_report(report)
     md_path = write_markdown_report(report)
 

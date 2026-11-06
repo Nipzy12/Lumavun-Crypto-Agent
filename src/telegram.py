@@ -362,11 +362,19 @@ def build_daily_summary(
     total = total_found if total_found is not None else new_count
 
     lines: List[str] = []
-    lines.append("LUMAVUN Crypto Agent V1.4.4 - ringkasan harian")
+    lines.append("LUMAVUN Crypto Agent V1.4.5 - ringkasan harian")
     lines.append(f"Scan: {scan_time}")
     if quest_summary is not None:
         groups = quest_summary.get("shortlist")
-        if groups is not None:
+        worklist = quest_summary.get("review_worklist")
+        if worklist is not None:
+            lines.append("Top review — REVIEW_REQUIRED, belum actionable")
+            for row in worklist['candidates'][:5]:
+                lines.append(f"{row['name'][:55]} | REVIEW_REQUIRED | {row['reward_type']}")
+                lines.append(row['official_url'][:240] or 'URL resmi belum terverifikasi')
+                lines.append("Kurang: " + ', '.join(row['missing_evidence'][:4]))
+            lines.append("Grant: anggaran program bukan reward individu. Rincian: review_worklist.json")
+        if groups is not None and worklist is None:
             for key, label in (("ACTIONABLE", "Actionable terverifikasi"), ("REVIEW_REQUIRED", "Perlu bukti"), ("BLOCKED", "Diblokir"), ("EXPIRED", "Kedaluwarsa"), ("EDUCATIONAL", "Pendidikan — bukan penghasilan")):
                 rows = groups.get(key, [])
                 lines.append(f"{label}: {len(rows)}")

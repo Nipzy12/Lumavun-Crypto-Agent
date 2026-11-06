@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--reviewer', default='operator', help='Reviewer identifier, no personal information required')
     parser.add_argument('--submit-url', help='Official URL request; no facts are approved by submission')
     parser.add_argument('--revalidate', action='store_true', help='Independently check approved official transports; respect cache/backoff')
+    parser.add_argument('--worklist', action='store_true', help='Read-only prioritized review worklist with revision tokens')
     parser.add_argument('--quest')
     parser.add_argument('--task')
     parser.add_argument('--evidence', help='Human decision/completion note, never private information or secrets')
@@ -59,6 +60,10 @@ def main():
             if args.quest not in records:
                 parser.error('Unknown quest ID')
             records = {args.quest: records[args.quest]}
+        if args.worklist:
+            from triage import worklist
+            print(json.dumps(worklist(records), indent=2, ensure_ascii=False))
+            return 0
         print(json.dumps([review_row(q) for q in records.values()], indent=2, ensure_ascii=False))
         return 0
     if not all((args.quest, args.task, args.evidence)):

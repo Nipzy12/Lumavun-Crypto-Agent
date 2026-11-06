@@ -356,3 +356,39 @@ Never commit credentials, wallet secrets, or seed phrases. Use repository secret
 ## License
 
 Provided as-is for read-only monitoring and research. No license is granted for third-party feed content, RPC endpoints, or Telegram bots you configure.
+
+## V1.4.5: zero-capital review worklist
+
+`review_worklist.json` in the `latest_report` artifact audits every persisted
+REVIEW_REQUIRED candidate, with independent participation cost, reward type and
+participation model, official URL, exact missing fields, verification steps,
+evidence timestamps, priority rationale and a state revision token. Priority
+never changes qualification. Grant budgets and educational/off-chain rewards
+are excluded from the simple-quest candidate metric; only independently
+attributed wallet receipts remain confirmed received rewards.
+
+Read locally with `python scripts/quest_queue.py review --worklist`.
+The [baseline audit](docs/triage-audit-v145.md) covers all 28 production review
+candidates. The latest runtime artifact supersedes this historical snapshot.
+
+To request evidence revalidation in the cloud, dispatch `agent.yml` with
+`queue_action=submit_evidence`, `quest_id`, `evidence_url`, `expected_revision`
+from the latest worklist, and a unique `review_request_id`. This queues an
+untrusted URL request, not verified facts or approval. Only existing approved
+source transports can independently verify matching campaign evidence;
+unbound URLs are UNSUPPORTED. No new credentials are required. Never put
+personal information or secrets in workflow inputs.
+
+The workflow restores the latest successful state before applying the request
+under a lock. Conflicts are recorded without changing campaign facts: download
+the new worklist and retry with a new request ID. Identical request retries are
+idempotent; reusing an ID with a different payload is rejected. The existing
+workflow concurrency group serializes scheduled and manual runs. A failed
+restore or malformed state fails closed for imports. Operator request history
+is append-only and merged alongside previous review/task/notification history.
+The normal scan then revalidates through the existing cache/backoff and security
+policy, and uploads the state for the next scheduled run.
+
+Daily Telegram digests show up to five REVIEW_REQUIRED candidates with official
+links and missing requirements. The existing daily notification key is retained;
+an already delivered daily digest is not resent merely because of this upgrade.

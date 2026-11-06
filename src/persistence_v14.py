@@ -14,7 +14,7 @@ QUEST_FIELDS = {
     'eligibility_evidence', 'risk_indicators', 'risk_explanation', 'risk_band', 'campaign_type',
     'announcement_url', 'evidence_checks', 'reasons', 'human_review',
     'source_class', 'source_updated_at', 'date_evidence', 'provenance', 'discovery_keyword_hit',
-    'evidence_requests', 'evidence_resolution', 'terms_digest', 'terms_review_required', 'terms_events',
+    'operator_history', 'evidence_requests', 'evidence_resolution', 'terms_digest', 'terms_review_required', 'terms_events',
     'qualification', 'qualification_schema', 'review_history', 'eligibility_text', 'task_archive', 'gas_status', 'gas_evidence',
     'platform_status', 'status', 'verified_at', 'first_seen', 'updated_at', 'last_observed', 'terms_hash',
 }
@@ -79,7 +79,7 @@ def clean_queue(value):
         if not isinstance(clean.get('task_archive'), dict):
             clean['task_archive'] = {}
         from recovery import union_events
-        for key in ('evidence_requests', 'terms_events'):
+        for key in ('evidence_requests', 'terms_events', 'operator_history'):
             clean[key] = union_events(record.get(key))
         clean['evidence_requests'] = [e for e in clean['evidence_requests'] if isinstance(e.get('url'), str) and e.get('status') in ('PENDING','CHECKED','UNSUPPORTED')]
         if not isinstance(clean.get('evidence_resolution'), dict):
@@ -129,7 +129,7 @@ def merge_extensions(base, update):
         winner, other = (record, old) if record['updated_at'] >= old['updated_at'] else (old, record)
         winner = deepcopy(winner)
         from recovery import union_events
-        for key in ('evidence_requests', 'terms_events'):
+        for key in ('evidence_requests', 'terms_events', 'operator_history'):
             winner[key] = union_events(winner.get(key), other.get(key))
         resolutions = [r for r in (winner.get('evidence_resolution'), other.get('evidence_resolution')) if isinstance(r, dict) and r]
         winner['evidence_resolution'] = max(resolutions, key=lambda r: str(r.get('updated_at', ''))) if resolutions else {}

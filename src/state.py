@@ -232,6 +232,7 @@ def merge_states(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]
 def state_lock(
     timeout: float = LOCK_TIMEOUT_SECONDS,
     stale_after: float = LOCK_STALE_SECONDS,
+    strict: bool = False,
 ) -> Iterator[None]:
     """Serialize state writes across concurrent runs.
 
@@ -260,6 +261,8 @@ def state_lock(
             time.sleep(0.02)
         except OSError:
             break
+    if strict and fd is None:
+        raise TimeoutError("Exclusive state lock unavailable")
     try:
         yield
     finally:

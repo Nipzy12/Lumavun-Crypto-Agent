@@ -96,7 +96,7 @@ def test_report_carries_v13_structure():
         total_found=9,
         state_source="run:123",
     )
-    assert report["version"] == "1.4.4"
+    assert report["version"] == "1.4.5"
     assert report["state_source"] == "run:123"
     assert report["campaign_count"] == 1
     assert report["total_found"] == 9

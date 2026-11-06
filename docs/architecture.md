@@ -112,3 +112,20 @@ Daily diagnostics use the existing persisted summary notification key. Source fa
 `campaign_sources.py` maps the documented Optimism mission API to existing Campaign/quest records with an exact repository/URL binding. `qualification.py` recognizes only this reviewed cross-host API binding; existing gates still apply. Source classification/provenance fields are additive persistence fields, without changing canonical IDs or task/review terms.
 
 `source_onboarding.py` validates committed source reviews and fixture integrity. `source_security.py` validates HTTPS syntax and public DNS destinations; `sources.py` rejects redirects and bounds streamed responses. `source_coverage.py` computes current-scan utility metrics and deduplicated campaign coverage separately from education and receipts. `main.py` writes the additional coverage artifact using the existing workflow artifact path. See [V1.4.4 source expansion specification](source-expansion-v144.md).
+
+### V1.4.5 triage and operator requests
+
+`triage.py` derives independent classifications without mutating qualifications.
+FREE_VERIFIED requires both fee and gas gates plus an official URL; missing gas
+remains COST_UNKNOWN. Grants are program funding, not individual token payouts.
+Review ordering counts explicit preferred properties, with deterministic ID ties;
+all mandatory qualification gates remain authoritative. Each worklist row exposes
+all field-level evidence and a manual action, or explains grant/education deferral.
+
+`manual_evidence.py` accepts only URL request intents and checks a semantic state
+revision before enqueueing. `scripts/import_evidence.py` validates restored state,
+locks the read/check/write transaction and atomically replaces the local artifact.
+It never imports a submitted state document or facts. `operator_history` records
+request payload hashes, actor, timestamp, URL and conflict/outcome; discovery and
+state merges union that history. Independent official-source revalidation alone
+can alter facts. Existing human task approval and completion remain separate.
