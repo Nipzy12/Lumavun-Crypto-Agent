@@ -1,10 +1,12 @@
-# LUMAVUN Autonomous Crypto Agent V1.5
+# LUMAVUN Autonomous Crypto Agent V1.5.2
 
 A zero-capital airdrop intelligence system: it reads a registry of verified sources (RSS/Atom feeds and public JSON APIs), extracts campaigns with their evidence, classifies the opportunity, applies a zero-capital filter, scores explainable risk indicators, and sends actionable Telegram notifications. It also monitors a Phantom wallet's SOL and SPL balances read-only.
 
 **No guaranteed earnings. No automatic claiming, wallet signing, transactions, or trades.** Every report states this in plain words.
 
-Current release: [human-assisted operations, playbooks, grant planning, operator commands and reward reconciliation](#v15-human-assisted-operations). [Production validation and remaining gaps](docs/release-v15.md).
+Current release: [V1.5.2 Cloudflare webhook deployment and rollback](docs/telegram-worker-v152.md). Deployment is not implied by this code release.
+
+Previous release: [human-assisted operations, playbooks, grant planning, operator commands and reward reconciliation](#v15-human-assisted-operations). [Production validation and remaining gaps](docs/release-v15.md).
 
 ## V1.4.4 — Official campaign discovery expansion
 

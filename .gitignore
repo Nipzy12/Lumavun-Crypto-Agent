@@ -22,3 +22,8 @@ source_coverage.json
 review_worklist.json
 
 operator_playbooks.json
+
+operator_snapshot.json
+worker/.wrangler/
+worker/node_modules/
+worker/.dev.vars*

@@ -60,7 +60,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("lumavun")
 
-AGENT_VERSION = "1.5"
+AGENT_VERSION = "1.5.2"
 
 
 def _env_list(name: str) -> List[str]:

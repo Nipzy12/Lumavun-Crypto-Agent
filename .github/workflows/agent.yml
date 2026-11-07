@@ -1,4 +1,4 @@
-name: LUMAVUN Crypto Agent V1.5
+name: LUMAVUN Crypto Agent V1.5.2
 on:
   workflow_dispatch:
     inputs:
@@ -60,6 +60,22 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Test Worker
+        run: node worker/test.mjs
+
+      - name: Validate Worker bundle
+        working-directory: worker
+        env:
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          npm ci
+          npm run check
+          npm run integration
 
       - name: Run tests
         run: python -m pytest tests -v
@@ -161,9 +177,20 @@ jobs:
           SOLANA_RPC_FALLBACK_URLS: ${{ vars.SOLANA_RPC_FALLBACK_URLS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_OPERATOR_MODE: ${{ vars.TELEGRAM_OPERATOR_MODE }}
+          TELEGRAM_WEBHOOK_VERIFIED: ${{ vars.TELEGRAM_WEBHOOK_VERIFIED }}
           TELEGRAM_OPERATOR_USER_IDS: ${{ vars.TELEGRAM_OPERATOR_USER_IDS }}
           SOLANA_REWARD_RPC_URL: ${{ secrets.SOLANA_REWARD_RPC_URL || vars.SOLANA_REWARD_RPC_URL }}
           GALXE_ACCESS_TOKEN: ${{ secrets.GALXE_ACCESS_TOKEN }}
+
+      - name: Export and publish sanitized operator snapshot
+        id: snapshot
+        if: steps.run.outcome == 'success'
+        continue-on-error: true
+        env:
+          OPERATOR_WORKER_URL: ${{ vars.OPERATOR_WORKER_URL }}
+          OPERATOR_SNAPSHOT_WRITE_TOKEN: ${{ secrets.OPERATOR_SNAPSHOT_WRITE_TOKEN }}
+        run: python scripts/export_operator_snapshot.py
 
       # Reports and state are uploaded even when the agent fails, so a broken
       # run still leaves diagnostics behind.
@@ -179,6 +206,7 @@ jobs:
             source_coverage.json
             review_worklist.json
             operator_playbooks.json
+            operator_snapshot.json
           retention-days: 7
           if-no-files-found: warn
           overwrite: true
@@ -208,6 +236,7 @@ jobs:
         env:
           STATE_SOURCE: ${{ steps.dedup_in.outputs.state_source }}
           RUN_OUTCOME: ${{ steps.run.outcome }}
+          SNAPSHOT_PUBLICATION: ${{ steps.snapshot.outputs.status }}
           SOURCES_OUTCOME: ${{ steps.verify.outcome }}
         run: |
           python - <<'PY'
@@ -218,6 +247,7 @@ jobs:
           summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
           lines = ["## LUMAVUN Crypto Agent V1.3", ""]
           lines.append(f"- Dedup state source: `{os.environ.get('STATE_SOURCE') or 'unknown'}`")
+          lines.append(f"- Operator snapshot publication: `{os.environ.get('SNAPSHOT_PUBLICATION') or 'not attempted'}`")
           lines.append(f"- Agent step outcome: `{os.environ.get('RUN_OUTCOME') or 'skipped'}`")
           lines.append(f"- Source verification: `{os.environ.get('SOURCES_OUTCOME') or 'skipped'}`")
 

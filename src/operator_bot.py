@@ -46,6 +46,9 @@ def reply(text, state, now=None):
 
 
 def poll(state, *, token=None, chat=None, allowed=None, post=requests.post, send=notify, checkpoint=None):
+    mode = os.getenv('TELEGRAM_OPERATOR_MODE', 'polling')
+    if mode == 'webhook' and os.getenv('TELEGRAM_WEBHOOK_VERIFIED') == 'true':
+        return {'status': 'WEBHOOK_MODE', 'replied': 0}
     token = token if token is not None else os.getenv('TELEGRAM_BOT_TOKEN', '')
     chat = chat if chat is not None else os.getenv('TELEGRAM_CHAT_ID', '')
     raw = allowed if allowed is not None else os.getenv('TELEGRAM_OPERATOR_USER_IDS', '')

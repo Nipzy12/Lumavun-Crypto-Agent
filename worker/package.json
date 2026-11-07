@@ -1,0 +1,13 @@
+{
+  "name": "lumavun-operator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test.mjs",
+    "check": "wrangler deploy --dry-run --outdir dist",
+    "integration": "node integration.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.158.0"
+  }
+}

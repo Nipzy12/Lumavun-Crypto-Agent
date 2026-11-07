@@ -162,3 +162,18 @@ notification cursor metadata changes, never qualification or task decisions.
 Atomic pre-send claims provide at-most-once dispatch across overlapping workers;
 there is no claim of exactly-once delivery. Polling is bounded and follows the
 existing scan schedule unless an operator invokes the standalone poll.
+
+### V1.5.2 webhook read model
+
+GitHub Actions exports a strict version-1 public projection through
+`operator_snapshot.py`, independently from private report/state artifacts.
+`scripts/export_operator_snapshot.py` optionally publishes it to the authenticated
+Worker endpoint; publication failure never resets agent state. The Worker's
+SQLite Durable Object holds only the latest projection, transient atomic update
+claims, bounded rate counters and delivery outcome timestamps. No discovery,
+qualification, approvals or wallet operations move to Cloudflare.
+
+Polling remains the default. The operator must verify deployment, Telegram
+registration and actual human command delivery before setting both explicit
+cutover variables. See the deployment document for drained, non-destructive
+rollback and the acknowledged at-most-once delivery tradeoff.
