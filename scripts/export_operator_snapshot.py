@@ -23,11 +23,14 @@ def main():
     Path('operator_snapshot.json').write_text(json.dumps(data, sort_keys=True, indent=2))
     url = os.environ.get('OPERATOR_WORKER_URL', '').rstrip('/')
     secret = os.environ.get('OPERATOR_SNAPSHOT_WRITE_TOKEN', '')
-    if not url and not secret:
-        publication_status('UNCONFIGURED')
-        print('Snapshot exported; remote publication UNCONFIGURED')
+    if not secret:
+        # The Worker URL is a public, versioned code default. A missing
+        # write credential is a setup condition, not a scan failure.
+        status = 'CREDENTIAL_NOT_CONFIGURED' if url else 'UNCONFIGURED'
+        publication_status(status)
+        print('Snapshot exported; remote publication ' + status)
         return
-    if not url or not secret or not check_source_destination(url):
+    if not url or not check_source_destination(url):
         raise ValueError('Snapshot publication configuration invalid')
     try:
         response = requests.put(url + '/snapshot', json=data, headers={'Authorization':'Bearer ' + secret}, timeout=15, allow_redirects=False)
