@@ -26,7 +26,7 @@ def adapter():
         "docs_url": "https://api.example.org/docs",
         "terms_url": "https://example.org/terms",
         "checked_at": (utcnow()-timedelta(minutes=2)).isoformat(),
-        "automation_allowed": True, "gasless_verified": True,
+        "automation_allowed": True, "gasless_verified": True, "network": "solana-mainnet",
         "no_mandatory_fees_verified": True, "requires_token": True,
     }
 
@@ -34,7 +34,7 @@ def adapter():
 @pytest.fixture
 def record():
     return {
-        "id": ID, "official_url": "https://example.org/campaign",
+        "id": ID, "official_url": "https://example.org/campaign", "networks": ["Solana"],
         "operations": {"state": "AWAITING_RESULT"},
         "tasks": {"task1": {"completion": {"kind": "human_confirmation", "at": "2026-11-15",
                                            "evidence": "Human inspected proof"},
