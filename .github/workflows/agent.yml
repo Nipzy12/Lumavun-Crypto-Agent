@@ -291,7 +291,7 @@ jobs:
           import pathlib
 
           summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-          lines = ["## LUMAVUN Crypto Agent V1.3", ""]
+          lines = ["## LUMAVUN Crypto Agent V1.6", ""]
           lines.append(f"- Dedup state source: `{os.environ.get('STATE_SOURCE') or 'unknown'}`")
           lines.append(f"- Operator snapshot publication: `{os.environ.get('SNAPSHOT_PUBLICATION') or 'not attempted'}`")
           lines.append(f"- Agent step outcome: `{os.environ.get('RUN_OUTCOME') or 'skipped'}`")
