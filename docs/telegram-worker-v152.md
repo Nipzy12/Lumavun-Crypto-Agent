@@ -5,6 +5,36 @@ A successful build or a mocked Telegram response does not prove production deliv
 GitHub Actions remains the sole discovery/qualification/wallet monitoring authority.
 The Worker only reads a sanitized production projection and replies to commands.
 
+## Connected Cloudflare deployment (2026-11-15 UTC)
+
+The Worker **`lumavun-operator`** has been uploaded to the connected Cloudflare
+account and enabled at
+`https://lumavun-operator.nexoraz.workers.dev`. The `OPERATOR` SQLite-backed
+Durable Object binding and its `v1` migration are deployed. This verifies
+infrastructure creation only, **not** an active Telegram webhook.
+
+Cloudflare secrets `OPERATOR_USER_IDS` and `PERMITTED_CHAT_ID` were configured
+from the operator's existing private-chat setup. Cloudflare still needs
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, and `SNAPSHOT_WRITE_TOKEN`.
+The GitHub repository still needs `TELEGRAM_WEBHOOK_SECRET` and
+`OPERATOR_SNAPSHOT_WRITE_TOKEN`, whose values must match their Cloudflare
+counterparts. Never paste secret values into a commit or issue.
+
+The default Worker URL is now present as a fallback in `agent.yml`, so setting
+`OPERATOR_WORKER_URL` is optional unless deploying elsewhere. Once the secret
+bindings exist, run the agent workflow to publish a fresh snapshot before
+attempting webhook registration.
+
+For cutover, a new manual
+[operator webhook administration workflow](https://github.com/Nipzy12/Lumavun-Crypto-Agent/actions/workflows/operator-webhook.yml)
+supports `status`, `set`, and `delete`. Changing the webhook requires the
+`operators_paused` confirmation. The `set` action restores the most recent
+successful production polling offset and runs the existing authenticated health
+and Telegram API checks; it does **not** automatically assert real delivery or
+flip `TELEGRAM_OPERATOR_MODE`. Send a genuine allowlisted `/status`, confirm
+a real reply and Worker health, then update the existing GitHub mode Variables
+according to the cutover procedure below. Until then, keep GitHub polling on.
+
 ## Storage and security
 
 Use one Worker/namespace per bot; retain its namespace when rotating that bot’s token.
