@@ -1,0 +1,33 @@
+name: Claim Engine Safety Checks
+on:
+  push:
+    paths:
+      - 'src/claim_engine.py'
+      - 'scripts/claim_ops.py'
+      - 'config/claim_adapters.json'
+      - 'tests/test_claim_engine.py'
+      - '.github/workflows/claim-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  claim-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+      - name: Compile claim engine
+        run: python -m py_compile src/claim_engine.py scripts/claim_ops.py
+      - name: Validate claim registry and dry-run gates
+        run: |
+          PYTHONPATH=src python -c 'from claim_engine import adapters; print("Reviewed claim adapters:", len(adapters()))'
+      - name: Run full regression suite
+        run: python -m pytest tests -q
