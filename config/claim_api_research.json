@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-11-16",
+  "scope": "Official public documentation research only; no live wallet eligibility established and no claim attempted.",
+  "review_policy": "No adapter activation without a current individual campaign ID, official participant claim API permission, zero mandatory fees and gas, Solana mainnet compatibility, live eligibility and explicit operator authorization.",
+  "candidates": [
+    {
+      "id": "galxe-quest",
+      "name": "Galxe Quest / Earndrop",
+      "network": "mixed-evm-solana",
+      "api_role": "ORGANIZER_ELIGIBILITY_AND_MANUAL_CLAIM",
+      "status": "EXCLUDED",
+      "reason_code": "CLAIM_FEES_AND_NO_PARTICIPANT_AUTOCLAIM_API",
+      "document_url": "https://help.galxe.com/en/articles/10242805-rest-api-management",
+      "additional_evidence_urls": [
+        "https://help.galxe.com/en/articles/12829115-understanding-claim-fees",
+        "https://help.galxe.com/en/articles/18361711-galxe-is-integrating-into-gravity-what-you-need-to-know"
+      ],
+      "notes": "REST credential is for Space Owners to verify tasks, not general permission to automate participant claims. Official notice: no new campaigns after 2026-11-09; participation until 2026-12-05; rewards claim until 2026-12-15.",
+      "claim_deadline": "2026-12-15",
+      "automation_allowed": false,
+      "gasless_for_participant": false,
+      "mainnet_income": false,
+      "official_claim_contract": false
+    },
+    {
+      "id": "thirdweb-distribute",
+      "name": "thirdweb Distribute Tokens",
+      "network": "evm",
+      "api_role": "ISSUER_DISTRIBUTION",
+      "status": "EXCLUDED",
+      "reason_code": "SERVER_WALLET_AND_ISSUER_CREDENTIAL_REQUIRED",
+      "document_url": "https://portal.thirdweb.com/transactions/distribute-tokens",
+      "additional_evidence_urls": [],
+      "notes": "Gas sponsored, but requires deployed token contract, funded issuer server wallet and issuer secret. Example POST /api/claim belongs to an application created by issuer, not a general participant API.",
+      "claim_deadline": null,
+      "automation_allowed": false,
+      "gasless_for_participant": true,
+      "mainnet_income": false,
+      "official_claim_contract": false
+    },
+    {
+      "id": "solana-request-airdrop",
+      "name": "Solana JSON-RPC requestAirdrop",
+      "network": "solana-devnet-testnet",
+      "api_role": "TESTNET_FAUCET",
+      "status": "EXCLUDED",
+      "reason_code": "TESTNET_FUNDS_ARE_NOT_MAINNET_INCOME",
+      "document_url": "https://solana.com/developers/cookbook/development/airdrops-and-faucets",
+      "additional_evidence_urls": [
+        "https://solana.com/docs/rpc/http/requestairdrop"
+      ],
+      "notes": "Documented and programmable faucet for testing only. Test SOL is not mainnet SOL and cannot be counted as earnings.",
+      "claim_deadline": null,
+      "automation_allowed": true,
+      "gasless_for_participant": true,
+      "mainnet_income": false,
+      "official_claim_contract": false
+    },
+    {
+      "id": "tonconsole-jetton",
+      "name": "TON Console Jetton Airdrop",
+      "network": "ton-mainnet",
+      "api_role": "SIGNED_RECIPIENT_CLAIM",
+      "status": "EXCLUDED",
+      "reason_code": "RECIPIENT_SIGNATURE_AND_CLAIM_FEES",
+      "document_url": "https://docs.tonapi.io/tonconsole/jettons/airdrop",
+      "additional_evidence_urls": [],
+      "notes": "Recipient connects through TON Connect and signs claim, pays fixed claim fee plus blockchain fee; not supported by Solana wallet and not zero cost.",
+      "claim_deadline": null,
+      "automation_allowed": false,
+      "gasless_for_participant": false,
+      "mainnet_income": false,
+      "official_claim_contract": false
+    },
+    {
+      "id": "helium-hotspot-rewards",
+      "name": "Helium Hotspot Rewards",
+      "network": "solana-mainnet",
+      "api_role": "REWARD_ORACLE_AND_SIGNED_ONCHAIN_CLAIM",
+      "status": "EXCLUDED",
+      "reason_code": "HOTSPOT_OWNERSHIP_SIGNING_AND_SOL_FEES",
+      "document_url": "https://docs.helium.com/network-data/solana/rewardable-entities/",
+      "additional_evidence_urls": [
+        "https://docs.helium.com/tokens/sol-token/"
+      ],
+      "notes": "Oracle REST API provides lifetime rewards, but reward claim requires signed Solana transaction and fees; hotspot ownership not a free individual airdrop.",
+      "claim_deadline": null,
+      "automation_allowed": false,
+      "gasless_for_participant": false,
+      "mainnet_income": false,
+      "official_claim_contract": false
+    },
+    {
+      "id": "layerhop-checker",
+      "name": "LayerHop Airdrop Claim Checker",
+      "network": "evm",
+      "api_role": "READ_ONLY_CLAIM_CHECKER",
+      "status": "EXCLUDED",
+      "reason_code": "CHECKER_NOT_CLAIM_EXECUTION",
+      "document_url": "https://docs.layerhop.com/api-reference",
+      "additional_evidence_urls": [],
+      "notes": "The public GET /v1/claims reads third-party eligibility; documentation directs users to official campaign sites for claims and does not build transactions. Not an official individual campaign API.",
+      "claim_deadline": null,
+      "automation_allowed": false,
+      "gasless_for_participant": null,
+      "mainnet_income": false,
+      "official_claim_contract": false
+    },
+    {
+      "id": "solana-actions",
+      "name": "Solana Actions and Blinks",
+      "network": "solana-mainnet",
+      "api_role": "SIGNED_TRANSACTION_BUILDER",
+      "status": "EXCLUDED",
+      "reason_code": "REQUIRES_WALLET_SIGNATURE",
+      "document_url": "https://solana.com/docs/tools/actions",
+      "additional_evidence_urls": [],
+      "notes": "Action API prepares a transaction for user preview, signature and submission; this is not proof of a zero-cost unsigned participant claim.",
+      "claim_deadline": null,
+      "automation_allowed": false,
+      "gasless_for_participant": null,
+      "mainnet_income": false,
+      "official_claim_contract": false
+    }
+  ],
+  "approved_adapters": []
+}
