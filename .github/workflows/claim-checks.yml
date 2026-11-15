@@ -7,6 +7,8 @@ on:
       - 'config/claim_api_research.json'
       - 'scripts/report_claim_api_research.py'
       - 'tests/test_claim_api_audit.py'
+      - 'scripts/export_operator_snapshot.py'
+      - 'tests/test_snapshot_publication_setup.py'
       - 'tests/test_workflow.py'
       - 'scripts/claim_ops.py'
       - 'config/claim_adapters.json'
