@@ -5,7 +5,7 @@ on:
       queue_action:
         description: Record a human task decision (never executes the task)
         type: choice
-        options: [none, approve, complete, submit_evidence, operation]
+        options: [none, approve, complete, submit_evidence, operation, claim_authorize, claim_revoke, claim_run]
         default: none
       quest_id:
         description: Quest ID from the latest report
@@ -183,6 +183,40 @@ jobs:
           SOLANA_REWARD_RPC_URL: ${{ secrets.SOLANA_REWARD_RPC_URL || vars.SOLANA_REWARD_RPC_URL }}
           GALXE_ACCESS_TOKEN: ${{ secrets.GALXE_ACCESS_TOKEN }}
 
+      - name: Vet claim readiness and process explicitly authorized claim requests
+        id: claims
+        if: steps.run.outcome == 'success'
+        continue-on-error: true
+        env:
+          LUMAVUN_STATE_SOURCE: ${{ steps.dedup_in.outputs.state_source }}
+          CLAIM_ACTION: ${{ inputs.queue_action || 'none' }}
+          CLAIM_QUEST_ID: ${{ inputs.quest_id }}
+          CLAIM_EXPECTED_REVISION: ${{ inputs.expected_revision }}
+          CLAIM_REQUEST_ID: ${{ inputs.review_request_id }}
+          CLAIM_ACTOR: ${{ github.actor }}
+          CLAIM_WORKFLOW_AUTHORIZED: ${{ github.event_name == 'workflow_dispatch' && contains(fromJSON('["claim_authorize", "claim_revoke", "claim_run"]'), inputs.queue_action) }}
+          CLAIM_AUTO_ENABLED: ${{ vars.CLAIM_AUTO_ENABLED }}
+          CLAIM_PROVIDER_TOKEN: ${{ secrets.CLAIM_PROVIDER_TOKEN }}
+          CLAIM_EXECUTION_MODE: ${{ (inputs.queue_action == 'claim_run' || vars.CLAIM_AUTO_ENABLED == 'true') && 'execute' || 'audit' }}
+          PHANTOM_PUBLIC_ADDRESS: ${{ vars.PHANTOM_PUBLIC_ADDRESS }}
+        run: |
+          set -euo pipefail
+          case "$CLAIM_ACTION" in
+            claim_authorize)
+              python scripts/claim_ops.py authorize
+              if [ "$CLAIM_AUTO_ENABLED" = true ]; then python scripts/claim_ops.py run; fi
+              ;;
+            claim_revoke) python scripts/claim_ops.py revoke ;;
+            claim_run) python scripts/claim_ops.py run ;;
+            *)
+              if [ "$CLAIM_AUTO_ENABLED" = true ]; then
+                python scripts/claim_ops.py run
+              else
+                python scripts/claim_ops.py audit
+              fi
+              ;;
+          esac
+
       - name: Export and publish sanitized operator snapshot
         id: snapshot
         if: steps.run.outcome == 'success'
@@ -207,6 +241,7 @@ jobs:
             review_worklist.json
             operator_playbooks.json
             operator_snapshot.json
+            claim_readiness.json
           retention-days: 7
           if-no-files-found: warn
           overwrite: true
