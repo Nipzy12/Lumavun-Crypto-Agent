@@ -497,6 +497,27 @@ successful cursor. Confirmed attribution still requires a reviewed campaign link
 incoming tokens, badges, points and grant budgets are never presumed earnings.
 
 
+### Audit API claim resmi (November 2026)
+
+Riset dokumentasi resmi sudah diaudit di
+[claim-api-source-audit-2026-11-16.md](docs/claim-api-source-audit-2026-11-16.md).
+Tujuh jenis API/layanan telah ditinjau dan **belum ada** yang memenuhi
+claim otomatis tanpa biaya untuk peserta Solana Mainnet. API faucet Devnet,
+API distribusi milik penerbit, endpoint pengecek eligibility, dan
+claim bertanda tangan **tidak boleh** didaftarkan sebagai API claim peserta.
+
+Audit machine-readable:
+[config/claim_api_research.json](config/claim_api_research.json).
+Setiap workflow scan sukses membuat `claim_api_research_report.json` dalam
+artifact `latest_report`, termasuk alasan penolakan dan usia bukti.
+`claim_engine.adapters()` menolak adapter tanpa catatan persetujuan positif
+dan bukti terpisah pada registry audit. Ini tidak melakukan POST claim.
+
+Perubahan resmi Galxe diumumkan **9 November 2026**: batas ikut quest
+**5 Desember 2026**, batas claim reward **15 Desember 2026**.
+[Lihat pengumuman Galxe](https://help.galxe.com/en/articles/18361711-galxe-is-integrating-into-gravity-what-you-need-to-know).
+Batas tersebut bukan bukti claim layak ataupun gratis.
+
 ## V1.6: Verified zero-capital claim engine (disabled until a real eligible campaign)
 
 The agent now supports a permissioned off-chain Solana-mainnet claim interface:
