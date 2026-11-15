@@ -28,7 +28,7 @@ REQUIRED = {
     "id", "campaign_id", "official_url", "api_origin", "eligibility_path",
     "claim_path", "docs_url", "terms_url", "checked_at",
     "automation_allowed", "gasless_verified", "no_mandatory_fees_verified",
-    "requires_token",
+    "requires_token", "network",
 }
 
 
@@ -83,6 +83,8 @@ def validate_adapter(item, now=None):
     if (item["automation_allowed"], item["gasless_verified"],
             item["no_mandatory_fees_verified"]) != (True, True, True):
         raise ValueError("No reviewed official automation/cost permission")
+    if item["network"] != "solana-mainnet":
+        raise ValueError("Only independently verified Solana mainnet claims are supported")
     if type(item["requires_token"]) is not bool:
         raise ValueError("Explicit provider authentication requirement needed")
     checked = _time(item["checked_at"])
@@ -101,6 +103,8 @@ def adapters(path=REGISTRY, now=None):
         if item["campaign_id"] in by_campaign:
             raise ValueError("Duplicate claim adapter")
         by_campaign[item["campaign_id"]] = item
+    if sum(bool(a["requires_token"]) for a in by_campaign.values()) > 1:
+        raise ValueError("Only one credentialed provider per isolated secret is allowed")
     return by_campaign
 
 
@@ -126,8 +130,11 @@ def gate(record, adapter, *, wallet, now=None):
         reasons.append("NOT_ZERO_CAPITAL_INDIVIDUAL_QUEST")
     if record.get("id") != adapter["campaign_id"] or record.get("official_url") != adapter["official_url"]:
         reasons.append("OFFICIAL_CAMPAIGN_BINDING_MISMATCH")
-    if not isinstance(wallet, str) or not re.fullmatch(r"[1-9A-HJ-NP-Za-km-z]{32,44}", wallet):
+    from wallet import validate_solana_address
+    if not validate_solana_address(wallet):
         reasons.append("PUBLIC_WALLET_REQUIRED")
+    if "Solana" not in (record.get("networks") or []):
+        reasons.append("SOLANA_MAINNET_CAMPAIGN_EVIDENCE_REQUIRED")
     operations = record.get("operations") or {}
     if operations.get("state") not in ("SUBMITTED", "AWAITING_RESULT"):
         reasons.append("HUMAN_TASK_SUBMISSION_REQUIRED")
@@ -283,8 +290,16 @@ def claim_report(state, registry, *, wallet="", now=None):
                      "blockers": sorted(set(reasons)),
                      "adapter": adapter["id"] if adapter else None,
                      "attempted": already_dispatched(record)})
+    receipts = {
+        (e.get("signature"), e.get("asset"))
+        for store in (state.get("reward_wallets") or {}).values()
+        for e in (store.get("events") or {}).values()
+        if isinstance(e, dict) and e.get("attribution") == "CONFIRMED_QUEST_REWARD"
+        and e.get("signature") and e.get("asset")
+    }
     return {"schema_version": 1, "generated_at": now.isoformat(),
             "ready": sum(r["status"] == "READY_TO_DISPATCH" for r in rows),
             "attempted": sum(r["attempted"] for r in rows),
-            "received_rewards_verified_here": False,
+            "confirmed_wallet_receipts_existing_tracker": len(receipts),
+            "receipt_authority": "finalized wallet attribution only; API acknowledgment is not income",
             "claims": rows}
