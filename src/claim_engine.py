@@ -286,7 +286,8 @@ def claim_report(state, registry, *, wallet="", now=None):
                    if adapter else ["NO_REVIEWED_CLAIM_API_ADAPTER"])
         if adapter and not reasons:
             reasons += eligible_to_dispatch(record, adapter, wallet, now)
-        rows.append({"campaign_id": ident, "status": "READY_TO_DISPATCH" if not reasons else "NOT_READY",
+        rows.append({"campaign_id": ident, "expected_revision": revision(record),
+                     "status": "READY_TO_DISPATCH" if not reasons else "NOT_READY",
                      "blockers": sorted(set(reasons)),
                      "adapter": adapter["id"] if adapter else None,
                      "attempted": already_dispatched(record)})
