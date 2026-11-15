@@ -97,9 +97,20 @@ def adapters(path=REGISTRY, now=None):
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict) or set(data) != {"schema_version", "adapters"} or data["schema_version"] != 1 or not isinstance(data["adapters"], list):
         raise ValueError("Claim registry invalid")
+    # A claimed API is not approved merely because the registry contains it.
+    # The separate audited evidence registry must explicitly authorize its
+    # exact canonical campaign and static API transport.
+    from claim_api_audit import approved_claim_adapters
+    reviewed = approved_claim_adapters(now=now) if data["adapters"] else {}
     by_campaign = {}
     for item in data["adapters"]:
         validate_adapter(item, now)
+        proof = reviewed.get(item["campaign_id"])
+        if (not proof or proof["id"] != item["id"]
+                or proof["official_url"] != item["official_url"]
+                or proof["api_origin"] != item["api_origin"]
+                or proof["docs_url"] != item["docs_url"]):
+            raise ValueError("Claim adapter has no matching independent approved official API audit")
         if item["campaign_id"] in by_campaign:
             raise ValueError("Duplicate claim adapter")
         by_campaign[item["campaign_id"]] = item
