@@ -63,6 +63,6 @@ def test_authenticated_snapshot_publish(tmp_path, monkeypatch, requests_mock):
     request = requests_mock.put(base + "/snapshot", status_code=200)
     module.main()
     assert output.read_text().splitlines()[-1] == "status=PUBLISHED"
-    assert request.called_once
-    assert request.last_request.headers["Authorization"] == "Bearer " + "b"*40
-    assert request.last_request.json()["schema_version"] == 1
+    assert requests_mock.call_count == 1
+    assert requests_mock.last_request.headers["Authorization"] == "Bearer " + "b"*40
+    assert requests_mock.last_request.json()["schema_version"] == 1
