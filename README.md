@@ -495,3 +495,28 @@ when the monitored address has zero transfers. Provider retention gaps, unavaila
 transactions and bounded pagination are also reported, without resetting the last
 successful cursor. Confirmed attribution still requires a reviewed campaign link;
 incoming tokens, badges, points and grant budgets are never presumed earnings.
+
+
+## V1.6: Verified zero-capital claim engine (disabled until a real eligible campaign)
+
+The agent now supports a permissioned off-chain Solana-mainnet claim interface:
+official API eligibility GET, one-shot provider POST, per-campaign authorization,
+append-only audit events, and a `claim_readiness.json` report in `latest_report`.
+A provider response is **not** evidence of tokens received. Finalized wallet
+attribution is still the only receipt authority.
+
+**No claim is currently enabled or has been executed.**
+`config/claim_adapters.json` deliberately contains zero adapters: no current
+candidate has a verifiable, zero-cost, automation-permitted official claim API.
+Unknown fees, prohibited automation, missing eligibility and required wallet
+signatures are blocking conditions. Never supply seed phrases or private keys.
+
+GitHub Actions `agent.yml` provides `queue_action=claim_authorize`,
+`claim_revoke`, or `claim_run`. Authorize a vetted campaign using its
+`expected_revision` from the **latest** `claim_readiness.json`,
+a unique `review_request_id` and its `quest_id`. Scheduled auto-run
+requires explicit repository Variable `CLAIM_AUTO_ENABLED=true`; the default
+is audit-only. Use `CLAIM_PROVIDER_TOKEN` only as a GitHub Secret for a
+reviewed provider that actually requires it. See the detailed
+[V1.6 claim verification and deployment guide](docs/claim-execution-v16.md)
+and [claim-engine CI](.github/workflows/claim-checks.yml).
