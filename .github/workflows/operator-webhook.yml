@@ -1,0 +1,91 @@
+name: LUMAVUN Operator Webhook Administration
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "status (read only), set (enable webhook), delete (safe rollback)"
+        required: true
+        type: choice
+        options: [status, set, delete]
+        default: status
+      operators_paused:
+        description: "Confirm that operator commands are paused before set/delete"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+# Do not run webhook cutover while the scheduled scanner is polling Telegram.
+concurrency:
+  group: lumavun-crypto-agent
+  cancel-in-progress: false
+
+jobs:
+  administer:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install administrator dependencies
+        run: python -m pip install --disable-pip-version-check requests
+      - name: Require explicit cutover approval
+        env:
+          ACTION: ${{ inputs.action }}
+          OPERATORS_PAUSED: ${{ inputs.operators_paused }}
+        run: |
+          if [ "$ACTION" != status ] && [ "$OPERATORS_PAUSED" != true ]; then
+            echo "::error::Pause operator commands and tick operators_paused before changing Telegram webhook."
+            exit 1
+          fi
+      - name: Restore latest successful production polling state
+        if: inputs.action == 'set'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          prev="$(gh run list --repo "$GH_REPO" --workflow agent.yml --status success --limit 30 --json databaseId --jq '.[0].databaseId // empty')"
+          if [ -z "$prev" ]; then echo "::error::No successful agent state exists."; exit 1; fi
+          gh run download "$prev" --repo "$GH_REPO" --name dedup_state --dir .
+          if [ ! -s dedup_state.json ]; then echo "::error::Production polling state unavailable."; exit 1; fi
+      - name: Check prerequisites and administer Telegram webhook
+        env:
+          ACTION: ${{ inputs.action }}
+          OPERATORS_PAUSED: ${{ inputs.operators_paused }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          OPERATOR_WORKER_URL: ${{ vars.OPERATOR_WORKER_URL || 'https://lumavun-operator.nexoraz.workers.dev' }}
+          OPERATOR_SNAPSHOT_WRITE_TOKEN: ${{ secrets.OPERATOR_SNAPSHOT_WRITE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then echo "::error::TELEGRAM_BOT_TOKEN is not configured."; exit 1; fi
+          if [ "$ACTION" = set ] && { [ -z "$TELEGRAM_WEBHOOK_SECRET" ] || [ -z "$OPERATOR_SNAPSHOT_WRITE_TOKEN" ]; }; then
+            echo "::error::Configure TELEGRAM_WEBHOOK_SECRET and OPERATOR_SNAPSHOT_WRITE_TOKEN as GitHub Secrets first."
+            exit 1
+          fi
+          if [ "$ACTION" = status ]; then
+            python scripts/manage_operator_webhook.py status
+          elif [ "$ACTION" = set ]; then
+            python scripts/manage_operator_webhook.py set --operators-paused
+          elif [ "$ACTION" = delete ]; then
+            python scripts/manage_operator_webhook.py delete --operators-paused
+          else
+            exit 1
+          fi
+      - name: Explain safe activation
+        if: success()
+        env:
+          ACTION: ${{ inputs.action }}
+        run: |
+          if [ "$ACTION" = set ]; then
+            echo "Webhook URL verified. Send a real allowlisted /status and verify actual reply and authenticated Worker /health before setting TELEGRAM_OPERATOR_MODE=webhook and TELEGRAM_WEBHOOK_VERIFIED=true."
+          elif [ "$ACTION" = delete ]; then
+            echo "Webhook removed. Set TELEGRAM_OPERATOR_MODE=polling and TELEGRAM_WEBHOOK_VERIFIED=false before the next agent scan."
+          fi
