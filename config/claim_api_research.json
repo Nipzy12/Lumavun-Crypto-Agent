@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-11-16",
+  "observed_at": "2026-11-15",
   "scope": "Official public documentation research only; no live wallet eligibility established and no claim attempted.",
   "review_policy": "No adapter activation without a current individual campaign ID, official participant claim API permission, zero mandatory fees and gas, Solana mainnet compatibility, live eligibility and explicit operator authorization.",
   "candidates": [
