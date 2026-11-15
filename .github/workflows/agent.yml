@@ -6,6 +6,8 @@ on:
       - '.github/workflows/agent.yml'
       - 'config/claim_api_research.json'
       - 'config/claim_adapters.json'
+      - 'src/claim_api_audit.py'
+      - 'scripts/export_operator_snapshot.py'
   workflow_dispatch:
     inputs:
       queue_action:
@@ -294,6 +296,17 @@ jobs:
           lines = ["## LUMAVUN Crypto Agent V1.6", ""]
           lines.append(f"- Dedup state source: `{os.environ.get('STATE_SOURCE') or 'unknown'}`")
           lines.append(f"- Operator snapshot publication: `{os.environ.get('SNAPSHOT_PUBLICATION') or 'not attempted'}`")
+          claim_path = pathlib.Path("claim_api_research_report.json")
+          if claim_path.exists():
+              try:
+                  claim = json.loads(claim_path.read_text(encoding="utf-8"))
+                  lines.append(
+                      f"- Reviewed claim API sources: `{claim.get('reviewed_sources', 0)}`, "
+                      f"approved: `{claim.get('approved_claim_apis', 0)}`"
+                  )
+              except (ValueError, TypeError, OSError):
+                  lines.append("- Claim API audit report unreadable")
+
           lines.append(f"- Agent step outcome: `{os.environ.get('RUN_OUTCOME') or 'skipped'}`")
           lines.append(f"- Source verification: `{os.environ.get('SOURCES_OUTCOME') or 'skipped'}`")
 
