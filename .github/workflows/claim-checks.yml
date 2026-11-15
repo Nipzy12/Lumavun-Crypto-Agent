@@ -3,6 +3,10 @@ on:
   push:
     paths:
       - 'src/claim_engine.py'
+      - 'src/claim_api_audit.py'
+      - 'config/claim_api_research.json'
+      - 'scripts/report_claim_api_research.py'
+      - 'tests/test_claim_api_audit.py'
       - 'scripts/claim_ops.py'
       - 'config/claim_adapters.json'
       - 'tests/test_claim_engine.py'
@@ -25,9 +29,11 @@ jobs:
         run: |
           python -m pip install -r requirements.txt -r requirements-dev.txt
       - name: Compile claim engine
-        run: python -m py_compile src/claim_engine.py scripts/claim_ops.py
+        run: python -m py_compile src/claim_engine.py src/claim_api_audit.py scripts/claim_ops.py scripts/report_claim_api_research.py
       - name: Validate claim registry and dry-run gates
         run: |
           PYTHONPATH=src python -c 'from claim_engine import adapters; print("Reviewed claim adapters:", len(adapters()))'
+      - name: Audit official API documentation classification
+        run: python scripts/report_claim_api_research.py
       - name: Run full regression suite
         run: python -m pytest tests -q
