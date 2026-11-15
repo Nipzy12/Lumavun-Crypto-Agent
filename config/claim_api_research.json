@@ -122,6 +122,61 @@
       "gasless_for_participant": null,
       "mainnet_income": false,
       "official_claim_contract": false
+    },
+    {
+      "id": "streamflow-airdrops",
+      "name": "Streamflow Airdrop Distribution",
+      "network": "solana-mainnet",
+      "api_role": "SIGNED_RECIPIENT_CLAIM",
+      "status": "EXCLUDED",
+      "reason_code": "SERVICE_FEE_AND_WALLET_SIGNATURE_REQUIRED",
+      "document_url": "https://docs.streamflow.finance/en/articles/9675545-distributor-sdk",
+      "additional_evidence_urls": [
+        "https://docs.streamflow.finance/en/articles/14825485-how-to-claim-your-tokens-on-streamflow",
+        "https://docs.streamflow.finance/en/articles/17560817-costs-of-using-streamflow"
+      ],
+      "notes": "Official distributor SDK offers claim functionality for recipients, but the 2026 fee schedule lists airdrop claim fees of 0.0237 to 0.0317 SOL. Wallet approval/signature is also required; no verified zero-capital claim route for this participant.",
+      "claim_deadline": null,
+      "automation_allowed": false,
+      "gasless_for_participant": false,
+      "mainnet_income": false,
+      "official_claim_contract": false
+    },
+    {
+      "id": "solana-kora",
+      "name": "Solana Kora Fee Sponsorship",
+      "network": "solana-mainnet",
+      "api_role": "FEE_SPONSORSHIP_INFRASTRUCTURE",
+      "status": "EXCLUDED",
+      "reason_code": "PAYMASTER_NOT_AIRDROP_REWARD_PROVIDER",
+      "document_url": "https://solana.com/docs/tools/kora/getting-started",
+      "additional_evidence_urls": [
+        "https://solana.com/developers/cookbook/transactions/fee-sponsorship"
+      ],
+      "notes": "Solana paymaster infrastructure can sponsor fees when a specific application provides and funds a relayer, but it does not create entitlement, campaign allocation, an official participant claim endpoint, or permission to automate claiming.",
+      "claim_deadline": null,
+      "automation_allowed": false,
+      "gasless_for_participant": null,
+      "mainnet_income": false,
+      "official_claim_contract": false
+    },
+    {
+      "id": "solana-rewards-program",
+      "name": "Solana Rewards Program Merkle Distribution",
+      "network": "solana-mainnet",
+      "api_role": "ONCHAIN_DISTRIBUTION_PROTOCOL",
+      "status": "EXCLUDED",
+      "reason_code": "GENERIC_PROTOCOL_NOT_ELIGIBLE_CAMPAIGN",
+      "document_url": "https://solana.com/docs/tools/rewards",
+      "additional_evidence_urls": [
+        "https://solana.com/developers/cookbook/depin"
+      ],
+      "notes": "This is a reusable onchain direct/Merkle distribution protocol. Claim methods are transactions against campaign-specific recipient allocation, not a public free-reward faucet or general unsigned HTTP claim service. No qualifying campaign entitlement was established.",
+      "claim_deadline": null,
+      "automation_allowed": false,
+      "gasless_for_participant": null,
+      "mainnet_income": false,
+      "official_claim_contract": false
     }
   ],
   "approved_adapters": []
