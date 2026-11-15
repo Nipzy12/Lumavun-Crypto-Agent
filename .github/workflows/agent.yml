@@ -1,5 +1,9 @@
 name: LUMAVUN Crypto Agent V1.5.2
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/agent.yml'
   workflow_dispatch:
     inputs:
       queue_action:
