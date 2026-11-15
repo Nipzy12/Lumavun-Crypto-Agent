@@ -221,6 +221,10 @@ jobs:
               ;;
           esac
 
+      - name: Audit official claim API documentation and report exclusions
+        if: steps.run.outcome == 'success'
+        run: python scripts/report_claim_api_research.py
+
       - name: Export and publish sanitized operator snapshot
         id: snapshot
         if: steps.run.outcome == 'success'
@@ -246,6 +250,7 @@ jobs:
             operator_playbooks.json
             operator_snapshot.json
             claim_readiness.json
+            claim_api_research_report.json
           retention-days: 7
           if-no-files-found: warn
           overwrite: true
