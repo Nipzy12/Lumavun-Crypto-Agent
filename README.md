@@ -501,14 +501,14 @@ incoming tokens, badges, points and grant budgets are never presumed earnings.
 
 Riset dokumentasi resmi sudah diaudit di
 [claim-api-source-audit-2026-11-16.md](docs/claim-api-source-audit-2026-11-16.md).
-Tujuh jenis API/layanan telah ditinjau dan **belum ada** yang memenuhi
+Sepuluh jenis API/layanan telah ditinjau dan **belum ada** yang memenuhi
 claim otomatis tanpa biaya untuk peserta Solana Mainnet. API faucet Devnet,
 API distribusi milik penerbit, endpoint pengecek eligibility, dan
 claim bertanda tangan **tidak boleh** didaftarkan sebagai API claim peserta.
 
 Audit machine-readable:
 [config/claim_api_research.json](config/claim_api_research.json).
-Setiap workflow scan sukses membuat `claim_api_research_report.json` dalam
+Streamflow ditolak karena claim berbiaya SOL dan memerlukan konfirmasi wallet; Kora adalah infrastruktur sponsor biaya, bukan sumber reward; protokol Solana Rewards tidak membuktikan ada kampanye yang eligible.\n\nSetiap workflow scan sukses membuat `claim_api_research_report.json` dalam
 artifact `latest_report`, termasuk alasan penolakan dan usia bukti.
 `claim_engine.adapters()` menolak adapter tanpa catatan persetujuan positif
 dan bukti terpisah pada registry audit. Ini tidak melakukan POST claim.
