@@ -88,7 +88,7 @@ The existing [agent workflow](../.github/workflows/agent.yml) now offers three
 manual `queue_action` values:
 
 - `claim_authorize`: enter canonical `quest_id`, `expected_revision` from
-  a fresh `review_worklist.json` or claim audit, and a unique lowercase
+  the latest `claim_readiness.json` artifact, and a unique lowercase
   `review_request_id` matching `[a-z][a-z0-9_-]{2,48}`. This records
   a time-limited approval, only if every claim gate passes.
 - `claim_revoke`: record an explicit revocation for that campaign.
