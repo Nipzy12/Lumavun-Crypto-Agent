@@ -21,6 +21,22 @@ Metadata terstruktur: [`config/claim_api_research.json`](../config/claim_api_res
 | [Solana Actions](https://solana.com/docs/tools/actions) | API menyusun transaksi untuk ditandatangani | Bukan jalur claim tanpa tanda tangan |
 | [Galxe REST Credential](https://help.galxe.com/en/articles/10242805-rest-api-management) | API *Space Owner* memeriksa kelayakan task | Bukan izin umum menjalankan claim peserta. [Panduan fee](https://help.galxe.com/en/articles/12829115-understanding-claim-fees) menyebut biaya claim |
 
+| [Streamflow Airdrop SDK](https://docs.streamflow.finance/en/articles/9675545-distributor-sdk) | SDK `claim` untuk penerima distribusi Solana | [Panduan claim](https://docs.streamflow.finance/en/articles/14825485-how-to-claim-your-tokens-on-streamflow) memerlukan konfirmasi wallet. [Jadwal biaya](https://docs.streamflow.finance/en/articles/17560817-costs-of-using-streamflow) mencantumkan claim 0,0237–0,0317 SOL |
+| [Solana Kora](https://solana.com/docs/tools/kora/getting-started) | Infrastruktur paymaster untuk mensponsori biaya transaksi | Sponsorship perlu disediakan dan didanai proyek. Bukan airdrop, bukan bukti eligibility wallet, dan tidak otomatis memberi reward |
+| [Solana Rewards Program](https://solana.com/docs/tools/rewards) | Protokol distribusi token dan Merkle claim | Protokol umum tanpa kampanye eligible yang diketahui; claim melalui instruksi onchain, bukan REST claim peserta gratis yang sudah diverifikasi |
+
+## Pengamatan teknis tambahan
+
+Biaya yang disponsori **tidak sama** dengan izin melakukan claim otomatis.
+Kora memungkinkan sebuah proyek membiayai transaksi pengguna, tetapi bot
+LUMAVUN tetap harus memiliki kampanye tertentu, reward riil, bukti peserta
+eligible, persetujuan dan metode claim resmi. Solana Rewards Program juga
+menjelaskan Merkle proof dan distribusi, bukan membagikan token gratis kepada
+sembarang wallet.
+
+Semua temuan ini dimasukkan ke kategori API/protokol terpisah sehingga
+`CLAIM_AUTO_ENABLED` tidak dapat mengubahnya menjadi adapter claim peserta.
+
 ## Perubahan penting pada Galxe
 
 Menurut [pengumuman resmi 9 November 2026](https://help.galxe.com/en/articles/18361711-galxe-is-integrating-into-gravity-what-you-need-to-know), Galxe Quest dan sejumlah layanan terkait akan dihentikan bertahap:
@@ -73,5 +89,6 @@ Laporan real-time bukan berarti semua biaya atau kelayakan telah diteliti.
 Sistem sengaja mengembalikan **NO_APPROVED_CLAIM_API** ketimbang menebak
 endpoint dari tombol `Claim` di browser.
 
-Sumber dokumentasi diverifikasi secara manual pada 15 November 2026 UTC
-(16 November WITA). Tidak ada sumber yang dipakai untuk melakukan POST claim.
+Sumber awal diperiksa pada 15 November 2026 UTC (16 November WITA),
+dan tiga sumber tambahan diperiksa pada 16 November 2026 WITA.
+Tidak ada sumber yang dipakai untuk melakukan POST claim.
