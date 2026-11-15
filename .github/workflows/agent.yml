@@ -188,7 +188,7 @@ jobs:
         if: steps.run.outcome == 'success'
         continue-on-error: true
         env:
-          OPERATOR_WORKER_URL: ${{ vars.OPERATOR_WORKER_URL }}
+          OPERATOR_WORKER_URL: ${{ vars.OPERATOR_WORKER_URL || 'https://lumavun-operator.nexoraz.workers.dev' }}
           OPERATOR_SNAPSHOT_WRITE_TOKEN: ${{ secrets.OPERATOR_SNAPSHOT_WRITE_TOKEN }}
         run: python scripts/export_operator_snapshot.py
 
