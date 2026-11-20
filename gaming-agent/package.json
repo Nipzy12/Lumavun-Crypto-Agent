@@ -1,0 +1,16 @@
+{
+  "name": "lumavun-zero-capital-gaming-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "doctor": "node src/index.mjs doctor",
+    "status": "node src/index.mjs status",
+    "run:once": "node src/index.mjs run-once",
+    "run": "node src/index.mjs run",
+    "test": "node --test"
+  }
+}

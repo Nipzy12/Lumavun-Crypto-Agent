@@ -1,0 +1,39 @@
+name: LUMAVUN Gaming Agent V1 (read-only)
+on:
+  push:
+    paths:
+      - 'gaming-agent/**'
+      - 'docs/gaming-agent-v1.md'
+      - '.github/workflows/gaming-agent.yml'
+  pull_request:
+    paths:
+      - 'gaming-agent/**'
+      - 'docs/gaming-agent-v1.md'
+      - '.github/workflows/gaming-agent.yml'
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lumavun-gaming-monitor-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  gaming-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: gaming-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test zero-expense guard
+        run: npm test
+      - name: Monitor Botcoin (no private key, no paid API action)
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          BOTCOIN_PUBLIC_KEY: ${{ vars.BOTCOIN_PUBLIC_KEY }}
+        run: node src/index.mjs run-once

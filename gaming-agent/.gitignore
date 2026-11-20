@@ -1,0 +1,4 @@
+.local/
+.env
+*.pem
+node_modules/
