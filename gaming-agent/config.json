@@ -1,0 +1,16 @@
+{
+  "name": "LUMAVUN Zero Capital Gaming Agent V1",
+  "autoplay": true,
+  "strictZeroExpense": true,
+  "intervalMinutes": 15,
+  "payoutMode": "hold",
+  "maxSpending": 0,
+  "sharePrivateKeys": false,
+  "game": "botcoin",
+  "solver": {
+    "type": "ollama-local",
+    "model": "",
+    "minimumConfidence": 0.98,
+    "maximumSolveAttemptsPerHunt": 1
+  }
+}
